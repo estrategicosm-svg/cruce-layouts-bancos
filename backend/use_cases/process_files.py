@@ -1,11 +1,33 @@
 import os
 import hashlib
+import logging
+from dataclasses import dataclass, field
 from typing import List, Tuple
 from datetime import date, datetime
 import uuid
 import uuid_utils # Assuming uuid7 is available or just standard uuid
 from xml.etree import ElementTree as ET
 from decimal import Decimal
+
+
+# ---------------------------------------------------------------------------
+# Logger configuration
+# ---------------------------------------------------------------------------
+_logger = logging.getLogger("process_files")
+_logger.setLevel(logging.DEBUG)
+
+_ch = logging.StreamHandler()
+_ch.setLevel(logging.INFO)
+_ch.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+_logger.addHandler(_ch)
+
+_logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+os.makedirs(_logs_dir, exist_ok=True)
+
+_fh = logging.FileHandler(os.path.join(_logs_dir, "app.log"), encoding="utf-8")
+_fh.setLevel(logging.DEBUG)
+_fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+_logger.addHandler(_fh)
 
 from infrastructure.database.uow import SQLAlchemyUnitOfWork
 from infrastructure.database.orm import models
@@ -33,6 +55,15 @@ from domains.configuration.repositories import ConfigurationRepository
 from domains.configuration.models import GeneralConfiguration, ConfigurationVersion, Tenant, AccountingConfiguration
 from domains.shared.canonical_models import CanonicalTransaction as DomainTransaction
 from domains.shared.canonical_models import CanonicalXML as DomainXML
+
+@dataclass
+class ProcessResult:
+    """Resultado de una ejecución de ProcessFilesAndPersistUseCase.execute()."""
+    run_id: str
+    total_files: int = 0
+    failed_files: int = 0
+    failed_file_names: List[str] = field(default_factory=list)
+
 
 class InMemoryConfigRepo(ConfigurationRepository):
     def __init__(self):
@@ -133,14 +164,18 @@ class ProcessFilesAndPersistUseCase:
             impuestos_desglosados=impuestos_desglosados
         )
 
-    def execute(self, file_paths: List[str], tenant_id: str) -> str:
+    def execute(self, file_paths: List[str], tenant_id: str) -> ProcessResult:
         # Generate a unique processing run ID for traceablity
         run_id = str(uuid.uuid4())
-        
+        total_files = len(file_paths)
+        failed_files: List[str] = []
+
+        _logger.info("Processing run %s started | tenant=%s | files=%d", run_id, tenant_id, total_files)
+
         with self.uow as uow:
             # 1. Intake & Hash
             xmls_to_process = []
-            
+
             company = uow.companies.get_by_rfc(tenant_id)
             if not company:
                 company = models.Company(
@@ -150,19 +185,19 @@ class ProcessFilesAndPersistUseCase:
                     processing_run_id=run_id
                 )
                 uow.companies.add(company)
-            
+
             for path in file_paths:
                 file_hash = self._calculate_hash(path)
                 file_name = os.path.basename(path)
                 file_size = os.path.getsize(path)
-                
+
                 # Check Idempotency
                 existing_doc = uow.documents.get_by_hash(file_hash)
-                
+
                 if existing_doc:
                     # Same document, do not duplicate. Just use existing_doc.
                     doc_orm = existing_doc
-                    
+
                     # Log Workflow Event for reprocessing
                     uow.workflow_events.add(models.WorkflowEvent(
                         id=str(uuid.uuid4()),
@@ -174,7 +209,7 @@ class ProcessFilesAndPersistUseCase:
                     # New Document
                     doc_id = str(uuid.uuid4())
                     tipo = "XML" if path.lower().endswith(".xml") else "PDF"
-                    
+
                     doc_orm = models.Document(
                         id=doc_id,
                         company_id=company.id,
@@ -186,7 +221,7 @@ class ProcessFilesAndPersistUseCase:
                         version=1
                     )
                     uow.documents.add(doc_orm)
-                    
+
                     doc_version = models.DocumentVersion(
                         id=str(uuid.uuid4()),
                         document_id=doc_id,
@@ -195,23 +230,35 @@ class ProcessFilesAndPersistUseCase:
                         processing_run_id=run_id
                     )
                     uow.documents.add_version(doc_version)
-                    
+
                     uow.workflow_events.add(models.WorkflowEvent(
                         id=str(uuid.uuid4()),
                         document_id=doc_id,
                         estado="RECEIVED",
                         processing_run_id=run_id
                     ))
-                
+
                 if path.lower().endswith(".xml"):
                     try:
                         domain_xml = self._parse_cfdi(path)
                         xmls_to_process.append((doc_orm, domain_xml))
-                    except Exception as e:
-                        # Skip or handle
-                        pass
+                    except Exception as exc:
+                        _logger.exception(
+                            "XML parse error | run=%s file=%s tipo=%s",
+                            run_id, file_name, type(exc).__name__,
+                        )
+                        doc_orm.estado_workflow = "FAILED"
+                        doc_orm.status = "ERROR"
+                        uow.workflow_events.add(models.WorkflowEvent(
+                            id=str(uuid.uuid4()),
+                            document_id=doc_orm.id,
+                            estado="FAILED",
+                            processing_run_id=run_id,
+                            mensaje=f"Parse error: {exc}"
+                        ))
+                        failed_files.append(file_name)
                 elif path.lower().endswith(".pdf"):
-                    # Stub for PDFs for now
+                    _logger.debug("PDF stub skipped | run=%s file=%s", run_id, file_name)
                     pass
             
             # 2. SAT Engine & XML Persist
@@ -302,5 +349,25 @@ class ProcessFilesAndPersistUseCase:
             
             # 5. Commit
             uow.commit()
-            
-        return run_id
+
+        result = ProcessResult(
+            run_id=run_id,
+            total_files=total_files,
+            failed_files=len(failed_files),
+            failed_file_names=failed_files,
+        )
+
+        if result.failed_files == result.total_files:
+            _logger.warning(
+                "All files failed for run %s | total=%d | files=%s",
+                run_id, total_files, failed_files,
+            )
+        elif result.failed_files > 0:
+            _logger.info(
+                "Partial failures for run %s | ok=%d failed=%d",
+                run_id, total_files - result.failed_files, result.failed_files,
+            )
+        else:
+            _logger.info("Run %s completed successfully | files=%d", run_id, total_files)
+
+        return result
