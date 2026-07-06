@@ -1,0 +1,31 @@
+Necesito que investigues (sin modificar nada) si el sistema actual
+tiene la capacidad de escribir un número de cruce/conciliación de
+vuelta en los archivos de Excel de salida, específicamente:
+
+1. Cuando el motor de conciliación (conciliacion/conciliador.py)
+   encuentra una coincidencia entre un CFDI/XML y un movimiento
+   bancario, ¿el resultado incluye o genera algún identificador de
+   cruce (folio, número de referencia interno, o similar) que vincule
+   ambos registros?
+
+2. ¿El exportador de Excel del estado de cuenta bancario (busca en
+   el código dónde se genera ese archivo de salida, probablemente algo
+   como excel_generator.py o formateador.py) tiene una columna donde
+   se pueda escribir ese número de cruce, o actualmente solo exporta
+   los movimientos bancarios tal como vienen, sin marca de conciliación?
+
+3. ¿La cédula de IVA (o el archivo Excel de esa cédula) tiene también
+   una columna para ese mismo número de cruce, de forma que ambos
+   archivos (estado de cuenta y cédula) puedan compararse fila por fila
+   usando ese identificador común?
+
+4. Si no existe esta funcionalidad todavía, dime exactamente qué se
+   necesitaría agregar: ¿un nuevo campo en el modelo de datos de
+   conciliación, un nuevo folio autogenerado, o basta con usar el UUID
+   del CFDI y el ID del movimiento bancario que ya existen?
+
+Muéstrame el código relevante de ambos exportadores de Excel y del
+motor de conciliación para que decidamos juntos si esto ya existe,
+si es fácil de agregar, o si requiere un rediseño más grande.
+
+No modifiques nada todavía, solo investiga y repórtame.

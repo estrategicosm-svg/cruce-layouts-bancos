@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import pandas as pd
 
-from core.models import ResultadoConciliacion, ResultadoConciliacionIngresos
+from core.models import ResultadoConciliacion
 
 
 def registros_a_dataframe(resultado: ResultadoConciliacion) -> pd.DataFrame:
@@ -23,32 +23,6 @@ def registros_a_dataframe(resultado: ResultadoConciliacion) -> pd.DataFrame:
                 "Fecha pago": registro.fecha_pago,
                 "Banco": registro.banco,
                 "Cruce bancario": registro.cruce_bancario,
-                "Estatus": registro.estatus,
-                "Observaciones": registro.observaciones,
-                "XML total": float(registro.cfdi.total) if registro.cfdi else None,
-                "Banco monto": float(registro.movimiento.monto) if registro.movimiento else None,
-            }
-        )
-    return pd.DataFrame(filas)
-
-
-def registros_ingresos_a_dataframe(resultado: ResultadoConciliacionIngresos) -> pd.DataFrame:
-    filas = []
-    for registro in resultado.registros:
-        filas.append(
-            {
-                "Folio": registro.folio_conciliacion,
-                "RFC": registro.rfc,
-                "Cliente": registro.cliente,
-                "UUID": registro.uuid,
-                "Factura": registro.factura,
-                "Fecha": registro.fecha,
-                "Total": float(registro.total),
-                "Moneda": registro.moneda,
-                "Amount MXN": float(registro.amount_mxn),
-                "Amount USD": float(registro.amount_usd),
-                "Forma de Pago": registro.forma_pago,
-                "Folio Transferencia": registro.folio_transferencia,
                 "Estatus": registro.estatus,
                 "Observaciones": registro.observaciones,
                 "XML total": float(registro.cfdi.total) if registro.cfdi else None,

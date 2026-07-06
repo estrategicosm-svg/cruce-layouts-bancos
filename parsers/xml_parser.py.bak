@@ -3,27 +3,11 @@ from __future__ import annotations
 import io
 import zipfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
 from core.models import CFDI
-
-
-@dataclass
-class ParseZipResult:
-    total: int = 0
-    exitosos: list[CFDI] = field(default_factory=list)
-    fallos: list[dict] = field(default_factory=list)
-
-    @property
-    def exitosos_count(self) -> int:
-        return len(self.exitosos)
-
-    @property
-    def fallos_count(self) -> int:
-        return len(self.fallos)
 
 
 class XMLParser:
@@ -44,43 +28,18 @@ class XMLParser:
             self.errores.append(f"{nombre_archivo or 'XML'}: {exc}")
             return None
 
-    def parsear_zip(self, archivo_zip: bytes) -> ParseZipResult:
-        resultado = ParseZipResult()
+    def parsear_zip(self, archivo_zip: bytes) -> list[CFDI]:
+        resultados: list[CFDI] = []
         try:
             with zipfile.ZipFile(io.BytesIO(archivo_zip)) as zf:
                 for nombre in zf.namelist():
                     if nombre.lower().endswith(".xml"):
-                        resultado.total += 1
-                        try:
-                            contenido = zf.read(nombre)
-                        except RuntimeError as exc:
-                            msg = str(exc).lower()
-                            if "password" in msg or "encrypted" in msg or "bad password" in msg:
-                                error_msg = f"{nombre}: ZIP protegido con contraseña — no se pudo leer."
-                            else:
-                                error_msg = f"{nombre}: {exc}"
-                            resultado.fallos.append({"archivo": nombre, "error": error_msg})
-                            self.errores.append(error_msg)
-                            continue
-                        cfdi = self.parsear_xml(contenido, nombre)
+                        cfdi = self.parsear_xml(zf.read(nombre), nombre)
                         if cfdi:
-                            resultado.exitosos.append(cfdi)
-                        else:
-                            ultimo_error = self.errores[-1] if self.errores else "Error desconocido"
-                            resultado.fallos.append({"archivo": nombre, "error": ultimo_error})
-        except RuntimeError as exc:
-            msg = str(exc).lower()
-            if "password" in msg or "encrypted" in msg or "bad password" in msg:
-                error_msg = "El ZIP está protegido con contraseña. Descomprímelo manualmente y sube los XML individuales."
-            else:
-                error_msg = f"Error procesando ZIP: {exc}"
-            self.errores.append(error_msg)
-            resultado.fallos.append({"archivo": "(ZIP)", "error": error_msg})
+                            resultados.append(cfdi)
         except Exception as exc:
-            error_msg = f"Error procesando ZIP: {exc}"
-            self.errores.append(error_msg)
-            resultado.fallos.append({"archivo": "(ZIP)", "error": error_msg})
-        return resultado
+            self.errores.append(f"Error procesando ZIP: {exc}")
+        return resultados
 
     def _extraer_datos(self, root: ET.Element, nombre_archivo: str | None) -> CFDI:
         ns = self._resolver_namespace(root)

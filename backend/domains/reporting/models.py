@@ -48,6 +48,7 @@ class AuditMetrics(BaseModel):
     total_polizas_cuadradas: int = 0
     total_polizas_rechazadas: int = 0
     cfdis_cancelados: int = 0
+    cfdis_con_errores_validacion: int = 0
     xmls_sin_conciliar: int = 0
     transacciones_sin_conciliar: int = 0
     matches_exactos: int = 0

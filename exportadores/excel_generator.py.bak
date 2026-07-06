@@ -29,7 +29,6 @@ class ExcelGenerator:
         orden = [
             "RESUMEN",
             "CEDULA_SAT",
-            "CEDULA_INGRESOS",
             "DETALLE_XML",
             "ESTADOS_CUENTA",
             "DIFERENCIAS",

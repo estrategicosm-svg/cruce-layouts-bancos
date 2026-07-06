@@ -7,7 +7,6 @@ from domains.reporting.models import (
     AuditFile, AuditSummary, AuditMetrics, AuditIndex, AuditIndexEntry,
     AuditSection, AuditAttachment, AuditObservation, AuditObservationSeverity
 )
-from domains.sat.models import SATRuleStatus
 
 class GenerateTaxFileUseCase:
     def __init__(self, uow: SQLAlchemyUnitOfWork):
@@ -72,11 +71,8 @@ class GenerateTaxFileUseCase:
                     "xml_uuid": sr.xml_uuid,
                     "overall_status": sr.overall_status
                 })
-                if sr.overall_status == SATRuleStatus.FAIL.value:
-                    if sr.xml and sr.xml.estado_cancelacion == "CANCELADO":
-                        metrics.cfdis_cancelados += 1
-                    else:
-                        metrics.cfdis_con_errores_validacion += 1
+                if sr.overall_status == "FAIL" or sr.overall_status == "REJECTED": # Check exactly the string
+                    metrics.cfdis_cancelados += 1
                     observaciones.append(AuditObservation(
                         section=AuditSection.VALIDACIONES_SAT,
                         severity=AuditObservationSeverity.CRITICAL,

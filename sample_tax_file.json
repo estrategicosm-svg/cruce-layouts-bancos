@@ -13,6 +13,7 @@
     "total_polizas_cuadradas": 1,
     "total_polizas_rechazadas": 0,
     "cfdis_cancelados": 0,
+    "cfdis_con_errores_validacion": 0,
     "xmls_sin_conciliar": 1,
     "transacciones_sin_conciliar": 0,
     "matches_exactos": 0

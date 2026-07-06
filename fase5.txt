@@ -1,0 +1,73 @@
+FASE 5 — Investigación: numeración consecutiva de conciliación + nueva
+hoja de ingresos conciliada
+
+Necesito agregar una nueva funcionalidad al sistema de conciliación.
+Antes de implementar nada, investiga y repórtame lo siguiente (no
+modifiques ningún archivo todavía):
+
+CONTEXTO DEL REQUERIMIENTO:
+1. Actualmente el cruce entre CFDI y movimiento bancario se identifica
+   solo por UUID. Quiero agregar un NÚMERO CONSECUTIVO adicional, más
+   simple de referenciar a mano:
+   - Para EGRESOS (que corresponden a la cédula de IVA acreditable):
+     el consecutivo inicia en 1.
+   - Para INGRESOS: el consecutivo inicia en 300.
+   - El consecutivo se reinicia en cada corrida/procesamiento (no se
+     acumula entre archivos ni entre meses).
+   - Formato: solo el número, sin prefijo (1, 2, 3... / 300, 301, 302...).
+
+2. Entiendo que la cédula de trabajo de INGRESOS tiene una estructura
+   de columnas diferente a la cédula de IVA acreditable (egresos).
+   Necesito que investigues ambas estructuras para confirmar esto.
+
+3. Quiero que la app, después de conciliar, genere UN ARCHIVO NUEVO de
+   salida (no que modifique el original) que incluya:
+   - La cédula de egresos/IVA acreditable, ya conciliada, con su
+     columna de consecutivo (empezando en 1).
+   - Una NUEVA hoja de ingresos, ya conciliada, con estructura propia
+     (diferente a la de egresos) y su columna de consecutivo (empezando
+     en 300).
+   - La hoja de estado de cuenta bancario (ESTADOS_CUENTA), también con
+     el mismo número consecutivo en la fila del movimiento
+     correspondiente, para poder cruzar visualmente los tres documentos
+     (cédula egresos, cédula ingresos, banco) usando ese número.
+
+PREGUNTAS QUE NECESITO QUE RESPONDAS INVESTIGANDO EL CÓDIGO:
+
+a) ¿Cómo distingue actualmente el sistema entre un registro de EGRESO
+   y uno de INGRESO? ¿Es un campo en el CFDI (por ejemplo
+   TipoDeComprobante == "I" vs "E"), o se infiere de otra forma?
+   Confírmalo en domains/cfdi/ y en parsers/xml_parser.py.
+
+b) ¿Actualmente existe algún flujo o parser para procesar una cédula
+   de INGRESOS, o el sistema hoy en día SOLO procesa la cédula de
+   egresos/IVA acreditable? Busca en parsers/cedula_parser.py y en
+   app.py si hay lógica diferenciada, o si todo el flujo actual asume
+   que la cédula subida es de egresos.
+
+c) Muéstrame la estructura de columnas actual de:
+   - La hoja "CEDULA_SAT" (egresos/IVA acreditable) tal como se genera
+     hoy en el Excel de salida.
+   - Si existe, cualquier plantilla o estructura de referencia para
+     una cédula de ingresos (busca si hay algún archivo de ejemplo,
+     plantilla, o esquema documentado en el proyecto).
+
+d) ¿Dónde exactamente se calcula/asigna registro.cruce_bancario y
+   dónde sería el lugar natural para asignar el nuevo número
+   consecutivo, de forma que sea coherente con cómo ya se construye
+   el CedulaRegistro?
+
+e) ¿El generador de Excel (exportadores/excel_generator.py y
+   reportes.py) puede generar un archivo completamente nuevo con
+   múltiples hojas sin afectar la función que genera el archivo actual?
+   Confirma si es viable agregar una función nueva tipo
+   generar_archivo_conciliado_completo() sin romper lo existente.
+
+Dame tu diagnóstico completo y, si tienes suficiente información, una
+propuesta de diseño de columnas para la nueva hoja de ingresos. Si NO
+existe todavía ningún flujo para procesar cédulas de ingresos, dime
+claramente qué tan grande sería ese trabajo adicional (parser nuevo,
+modelo de datos nuevo, etc.) antes de asumir que es solo agregar una
+columna.
+
+No modifiques ningún archivo. Esto es solo investigación y diagnóstico.

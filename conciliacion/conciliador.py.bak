@@ -47,12 +47,6 @@ class Conciliador:
                 registro.observaciones = str(exc)
                 resultados.append(registro)
 
-        folio = 1
-        for registro in resultados:
-            if registro.cfdi is not None and registro.movimiento is not None:
-                registro.folio_conciliacion = folio
-                folio += 1
-
         return self._generar_resultados(resultados, time.perf_counter() - inicio)
 
     def _conciliar_registro(

@@ -1,0 +1,74 @@
+FASE 5B — Nuevo flujo de conciliación de INGRESOS
+
+[... mismo encabezado y estructura de columnas que antes ...]
+
+REQUISITOS DE IMPLEMENTACIÓN:
+
+1. Crea un nuevo parser, por ejemplo parsers/cedula_ingresos_parser.py,
+   independiente del CedulaParser existente. Debe leer un Excel con la
+   estructura de "RESUMEN" descrita arriba y producir una lista de
+   registros de ingreso con: uuid (desde UUIDA), cliente, rfc, factura,
+   fecha, total, moneda, amount_mxn, amount_usd, forma_pago,
+   folio_transferencia_o_cheque, descripcion.
+
+2. En app.py, agrega un SEGUNDO file_uploader independiente del actual,
+   etiquetado "Cédula de Ingresos" (y renombra el uploader existente a
+   "Cédula de Egresos / IVA Acreditable" para claridad). Este segundo
+   uploader es OPCIONAL — si no se sube, el flujo de egresos sigue
+   funcionando exactamente igual que hoy.
+
+3. IMPORTANTE — cómo funciona la moneda en la práctica:
+   - Cada archivo de ESTADO DE CUENTA bancario que se sube es de UNA
+     SOLA MONEDA (o es la cuenta en dólares, o es la cuenta en pesos;
+     nunca vienen mezclados dentro del mismo estado de cuenta).
+   - La CÉDULA de ingresos, en cambio, SÍ trae registros mezclados de
+     ambas monedas en la misma hoja (columna "Moneda" = USD o MXN).
+   - Por lo tanto, al conciliar: primero determina la moneda del
+     estado de cuenta bancario que se está procesando (agrega una
+     forma de que el usuario indique o el sistema detecte si ese
+     estado de cuenta es USD o MXN — puede ser un selector simple en
+     la interfaz, tipo radio button "Este estado de cuenta es: ( )
+     Pesos ( ) Dólares").
+   - Luego, al conciliar, filtra los registros de la cédula de ingresos
+     para comparar SOLO los que tengan Moneda == a la del estado de
+     cuenta actual, usando el campo amount_mxn o amount_usd según
+     corresponda. Un registro en USD nunca debe compararse contra un
+     estado de cuenta en pesos, y viceversa.
+   - Si el usuario sube tanto un estado de cuenta en pesos como uno en
+     dólares (dos archivos, dos conciliaciones), el resultado final
+     debe combinar ambos: registros en USD conciliados contra el
+     estado en dólares, registros en MXN contra el estado en pesos.
+
+4. Implementa el número de folio de conciliación para ingresos:
+   - Empieza en 300, consecutivo, solo para registros conciliados
+     exitosamente (mismo patrón usado en egresos, que empieza en 1).
+   - Se escribe en la columna "Identificador numérico relacionado con
+     el estado de cuenta" del registro de ingreso.
+   - El mismo folio aparece también en la hoja ESTADOS_CUENTA en la
+     fila del movimiento bancario correspondiente.
+
+5. Genera una nueva hoja "CEDULA_INGRESOS" en el archivo de salida con
+   las columnas originales de la estructura (RFC, Cliente, UUIDA,
+   Factura, Fecha, Total, Moneda, Forma de Pago, etc.) más el folio de
+   conciliación y un estatus (conciliado / no conciliado).
+
+6. El archivo final de salida debe tener (si se subieron ambas
+   cédulas): CEDULA_SAT (egresos, folio desde 1), CEDULA_INGRESOS
+   (folio desde 300), y ESTADOS_CUENTA (con folio para ambos flujos).
+
+7. Antes de escribir código, muéstrame cómo planeas estructurar el
+   parser nuevo vs. reusar código común del CedulaParser existente, y
+   cómo vas a implementar el selector de moneda del estado de cuenta
+   en la interfaz de Streamlit sin romper el flujo actual de egresos.
+
+8. Haz backup de todos los archivos que modifiques antes de tocarlos.
+
+9. Agrega tests para: parseo correcto de la cédula de ingresos con la
+   estructura real, que un registro USD nunca concilie contra un
+   estado de cuenta marcado como MXN aunque el monto coincida
+   numéricamente, y asignación correcta del folio empezando en 300.
+
+10. Al final, resumen completo de cambios antes de aprobar commit.
+
+No toques el flujo de egresos existente salvo lo estrictamente
+necesario para compartir código común de forma segura.

@@ -1,0 +1,41 @@
+FASE 5A — Agregar número de folio de conciliación (consecutivo) al
+flujo de egresos existente
+
+Basado en el diagnóstico previo, implementa lo siguiente SOLO para el
+flujo de egresos que ya existe (no toques nada de ingresos todavía,
+eso será una fase separada):
+
+1. Agrega el campo folio_conciliacion: Optional[int] = None al modelo
+   CedulaRegistro en core/models.py.
+
+2. En conciliacion/conciliador.py, antes de iterar los registros para
+   conciliar, cuenta cuántos registros van a ser conciliados
+   exitosamente. Asigna un consecutivo empezando en 1, incrementando
+   por cada registro que SÍ se concilie exitosamente (que tenga tanto
+   cfdi como movimiento asignado). Los registros que NO se concilien
+   deben quedar con folio_conciliacion = None.
+
+   IMPORTANTE: el consecutivo se reinicia en 1 cada vez que se corre
+   una conciliación nueva (no se guarda ni se acumula entre corridas).
+
+3. Agrega la columna "Folio" a la hoja CEDULA_SAT en
+   reportes.py:registros_a_dataframe(), usando registro.folio_conciliacion.
+   Colócala como primera columna, antes de "Póliza".
+
+4. Agrega también esa misma columna "Folio" a la hoja ESTADOS_CUENTA
+   en app.py (_movimientos_df), llenándola SOLO en la fila del
+   movimiento bancario que corresponda a un registro conciliado (mismo
+   criterio que usaste para UUID_CFDI si ya lo implementamos antes;
+   si no, revisa cómo se vincula movimiento con registro conciliado).
+
+5. Haz backup de los archivos que modifiques antes de tocarlos.
+
+6. Agrega o actualiza un test que verifique: al conciliar 3 registros
+   donde 2 se concilian exitosamente y 1 no, los 2 conciliados reciben
+   folios 1 y 2 en orden, y el no conciliado tiene folio_conciliacion
+   = None.
+
+7. Muéstrame el resumen de cambios antes de que yo apruebe el commit.
+
+No implementes nada relacionado a ingresos todavía — eso es una fase
+separada que decidiremos después.

@@ -79,38 +79,6 @@ class CedulaRegistro:
 
 
 @dataclass
-class CedulaIngresoRegistro:
-    uuid: str
-    cliente: str
-    rfc: str
-    factura: str
-    fecha: datetime
-    total: Decimal
-    moneda: str
-    amount_mxn: Decimal
-    amount_usd: Decimal
-    forma_pago: str
-    folio_transferencia: str
-    descripcion: str
-    folio_conciliacion: Optional[int] = None
-    estatus: Optional[str] = None
-    observaciones: Optional[str] = None
-    cfdi: Optional[CFDI] = None
-    movimiento: Optional[MovimientoBancario] = None
-
-
-@dataclass
-class ResultadoConciliacionIngresos:
-    total_registros: int
-    conciliados: int
-    sin_xml: int
-    sin_banco: int
-    diferencias: int
-    errores: list[str]
-    registros: list[CedulaIngresoRegistro]
-
-
-@dataclass
 class ResultadoConciliacion:
     total_registros: int
     conciliados: int

@@ -1,0 +1,67 @@
+FASE 3 — Corregir contador de "cancelados" mal calculado
+
+Hay un bug en backend/application/use_cases/generate_tax_file.py, alrededor
+de la línea 118, dentro de la lógica que construye las AuditMetrics.
+
+PROBLEMA ACTUAL (detectado en auditoría previa):
+El código incrementa metrics.cfdis_cancelados en +1 para CUALQUIER CFDI
+cuyo sr.overall_status sea distinto de "PASS" — no solo para los que
+realmente fueron cancelados ante el SAT. Esto significa que un CFDI que
+falló, por ejemplo, una validación de IVA acreditable o de método de pago,
+aparece incorrectamente contado como "cancelado" en el resumen de auditoría.
+
+También se detectó que la comparación usa strings literales:
+    if sr.overall_status == "FAIL" or sr.overall_status == "REJECTED"
+en vez del enum correspondiente (SATRuleStatus) definido en
+domains/sat/models.py.
+
+LO QUE NECESITO QUE HAGAS:
+
+1. Antes de tocar nada, muéstrame:
+   - El código completo de generate_tax_file.py, especialmente la sección
+     donde se calculan las AuditMetrics.
+   - La definición completa del enum SATRuleStatus en
+     backend/domains/sat/models.py, para ver qué valores existen
+     realmente (¿hay un estado específico para "CANCELADO" separado de
+     "FAIL"? ¿Cómo se distingue un CFDI cancelado ante el SAT de uno que
+     solo falló una regla de negocio?).
+   - Cómo y dónde se determina originalmente si un CFDI fue cancelado
+     (busca la regla de validación de estatus SAT, probablemente algo
+     como CFDIStatusRule que mencionó la auditoría).
+
+2. Corrige la lógica para que:
+   - cfdis_cancelados cuente ÚNICAMENTE los CFDIs cuyo estatus real ante
+     el SAT sea "Cancelado" (verifica el campo/valor exacto que use el
+     dominio para esto — no asumas, confírmalo leyendo el código).
+   - Se agregue un contador NUEVO y separado para CFDIs que fallaron
+     otras validaciones de negocio (por ejemplo cfdis_con_errores_validacion
+     o el nombre que sea consistente con la nomenclatura ya usada en el
+     proyecto), para no perder esa información — solo separarla
+     correctamente de "cancelados".
+   - Reemplaza las comparaciones de string literal ("FAIL", "REJECTED")
+     por el enum SATRuleStatus correspondiente.
+
+3. Verifica si AuditSummary o el reporte final (Excel/JSON) muestran
+   cfdis_cancelados en algún lugar visible para el usuario final (por
+   ejemplo en el dashboard o en el archivo exportado). Si es así,
+   actualiza también esas referencias para que reflejen el nuevo
+   contador separado, y no queden desincronizadas.
+
+4. Actualiza o agrega tests en el archivo de tests correspondiente a
+   generate_tax_file que verifiquen específicamente:
+   - Un CFDI realmente cancelado ante el SAT se cuenta en
+     cfdis_cancelados.
+   - Un CFDI que falla otra regla de negocio (ej. IVA mal acreditado)
+     NO se cuenta como cancelado, sino en el nuevo contador separado.
+   - Un CFDI que pasa todas las validaciones no incrementa ninguno
+     de los dos contadores.
+
+5. Haz un backup del archivo original antes de modificarlo
+   (generate_tax_file.py.bak).
+
+6. Al final, muéstrame un resumen de todos los cambios, archivo por
+   archivo, antes de que yo decida hacer commit.
+
+No toques ningún otro archivo fuera de lo estrictamente necesario para
+este bug. Si tienes dudas sobre qué valor exacto representa "cancelado"
+en el dominio, muéstrame el código relevante y pregúntame antes de asumir.

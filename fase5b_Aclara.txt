@@ -1,0 +1,32 @@
+El plan se ve muy bien, apruebo la estructura general. Antes de que
+empieces a escribir código, necesito que aclares y ajustes un punto:
+
+FOLIO CONSECUTIVO ENTRE CORRIDAS DE DISTINTA MONEDA:
+
+Cuando el usuario sube la cédula de ingresos y la concilia primero
+contra el banco en MXN, y DESPUÉS (misma sesión, misma cédula ya
+cargada) sube el banco en USD para conciliar los registros restantes,
+el folio consecutivo de ingresos NO debe reiniciarse a 300 en la
+segunda corrida. Debe CONTINUAR desde el último folio asignado en la
+primera corrida (por ejemplo, si MXN terminó en folio 315, la corrida
+de USD debe empezar en 316, no volver a 300).
+
+El folio SOLO se reinicia a 300 cuando el usuario carga un archivo de
+cédula de ingresos NUEVO (sesión nueva, session_state limpio).
+
+Ajusta el diseño del punto 4 (acumulación en session_state) para que:
+- El contador de folio de ingresos viva en session_state, ligado a la
+  cédula de ingresos cargada actualmente.
+- Se reinicie a 300 solo cuando se detecta una cédula de ingresos
+  diferente (por ejemplo, comparando el hash del archivo subido, o si
+  el usuario limpia la sesión explícitamente).
+- Los registros ya conciliados en la corrida anterior (MXN) no pierdan
+  su folio ya asignado cuando se procese la corrida de USD.
+
+Aclara también: si el usuario recarga la página del navegador a la
+mitad del proceso (antes de terminar ambas corridas), ¿se pierde el
+progreso? Si es así, avísame en tu resumen final para que yo decida si
+eso es aceptable o si necesitamos guardar el progreso en disco temporal.
+
+Con esta aclaración incorporada al diseño, procede con la
+implementación completa.

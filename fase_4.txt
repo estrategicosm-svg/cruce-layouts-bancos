@@ -1,0 +1,59 @@
+FASE 4 — Visibilidad de XMLs procesados vs. fallidos al subir ZIP
+
+En la app de Streamlit (app.py), cuando el usuario sube un archivo ZIP
+con XMLs de CFDI, necesito que se le muestre claramente:
+
+1. Cuántos archivos .xml venían en total dentro del ZIP.
+2. Cuántos se procesaron exitosamente.
+3. Cuántos fallaron al procesarse, y por qué (nombre del archivo +
+   motivo del error, aunque sea breve).
+
+CONTEXTO DEL PROBLEMA:
+La auditoría previa detectó que en parsers/xml_parser.py, el método
+parsear_zip() actualmente registra los errores en self.errores pero esto
+no siempre se le muestra de forma clara al usuario en la interfaz de
+Streamlit. Si un XML viene corrupto o mal formado, puede procesarse el
+resto sin que el usuario note que faltó uno.
+
+LO QUE NECESITO QUE HAGAS:
+
+1. Antes de tocar nada, muéstrame:
+   - El código completo de parsers/xml_parser.py, especialmente
+     parsear_zip() y cómo se popula self.errores.
+   - La parte de app.py donde se llama a este parser y se muestra el
+     resultado al usuario, para entender el flujo actual de la interfaz.
+
+2. Modifica xml_parser.py si es necesario para que, además de registrar
+   errores internamente, retorne (o exponga) de forma clara y estructurada:
+   - Total de archivos .xml encontrados en el ZIP.
+   - Lista de archivos procesados exitosamente (o solo el conteo, tu
+     decides qué es más consistente con el código existente).
+   - Lista de archivos que fallaron, cada uno con su nombre y el mensaje
+     de error correspondiente.
+
+3. Modifica app.py para que, justo después de subir y procesar el ZIP,
+   se muestre al usuario un resumen visual claro, por ejemplo con
+   st.success(), st.warning() o st.error() de Streamlit:
+   - "Se encontraron X archivos XML en el ZIP."
+   - "Se procesaron correctamente Y archivos."
+   - Si hay fallos: "Z archivos no se pudieron procesar:" seguido de una
+     lista expandible (st.expander) con nombre de archivo + motivo.
+
+4. Si el ZIP viene protegido con contraseña o falla al abrirse por
+   completo, actualmente esto también falla silenciosamente según la
+   auditoría — corrígelo también para que se muestre un mensaje de
+   error claro al usuario en vez de un fallo silencioso.
+
+5. Agrega o actualiza un test que verifique:
+   - Un ZIP con XMLs válidos e inválidos mezclados reporta
+     correctamente el conteo de éxitos y fallos.
+   - Un ZIP protegido con contraseña genera un mensaje de error visible,
+     no un fallo silencioso.
+
+6. Haz un backup de los archivos originales antes de modificarlos.
+
+7. Al final, muéstrame un resumen de todos los cambios, archivo por
+   archivo, antes de que yo decida hacer commit.
+
+No cambies el flujo general de la app ni el diseño visual existente —
+solo agrega esta capa de visibilidad sobre lo que ya sube y procesa.

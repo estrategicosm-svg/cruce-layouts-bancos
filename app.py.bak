@@ -6,11 +6,9 @@ import pandas as pd
 import streamlit as st
 
 from conciliacion.conciliador import Conciliador
-from conciliacion.conciliador_ingresos import ConciliadorIngresos
 from exportadores.excel_generator import ExcelGenerator
-from exportadores.reportes import registros_a_dataframe, registros_ingresos_a_dataframe, resumen_a_dataframe
+from exportadores.reportes import registros_a_dataframe, resumen_a_dataframe
 from parsers.banco_parser import BancoParser
-from parsers.cedula_ingresos_parser import CedulaIngresosParser
 from parsers.cedula_parser import CedulaParser
 from parsers.xml_parser import XMLParser
 
@@ -42,9 +40,6 @@ class SATConciliatorApp:
     def _init_state(self) -> None:
         defaults = {
             "cedula": None,
-            "cedula_ingresos": None,
-            "ingresos_folio_counter": 300,
-            "ingresos_hash": None,
             "cfdis": None,
             "movimientos": None,
             "resultado": None,
@@ -75,10 +70,8 @@ class SATConciliatorApp:
 
             st.divider()
             st.subheader("Archivos")
-            cedula_file = st.file_uploader("Cedula de Egresos (IVA Acreditable)", type=["xlsx", "xls"])
-            ingresos_file = st.file_uploader("Cedula de Ingresos (opcional)", type=["xlsx", "xls"])
+            cedula_file = st.file_uploader("Cedula SAT Excel", type=["xlsx", "xls"])
             banco_file = st.file_uploader("Estado de cuenta Excel/PDF", type=["xlsx", "xls", "pdf"])
-            moneda_banco = st.radio("Moneda del estado de cuenta", ["MXN", "USD"], horizontal=True)
             xml_zip = st.file_uploader("ZIP con CFDI XML", type=["zip"])
 
             confirmado_pdf = True
@@ -95,7 +88,7 @@ class SATConciliatorApp:
                         
                 validacion = st.session_state.pdf_validacion
                 if not validacion.get("valido"):
-                    st.error("Advertencias detectadas en la extracción:")
+                    st.error("⚠️ Advertencias detectadas en la extracción:")
                     for adv in validacion.get("advertencias", []):
                         st.write(f"- {adv}")
                     st.warning("Validar Excel antes de usarlo para conciliación.")
@@ -113,14 +106,12 @@ class SATConciliatorApp:
                 )
 
             if st.button("Procesar archivos", type="primary", use_container_width=True):
-                if not cedula_file and not ingresos_file:
-                    st.error("Sube al menos una cedula (egresos o ingresos).")
-                elif not banco_file or not xml_zip:
-                    st.error("Carga el estado de cuenta y el ZIP de XML.")
+                if not cedula_file or not banco_file or not xml_zip:
+                    st.error("Carga la cedula, el estado de cuenta y el ZIP de XML.")
                 elif banco_file.name.lower().endswith('.pdf') and not confirmado_pdf:
                     st.error("Revisa las advertencias y confirma manualmente para continuar.")
                 else:
-                    self._procesar(cedula_file, ingresos_file, banco_file, xml_zip, moneda_banco, Decimal(str(tolerancia)), dias_tolerancia)
+                    self._procesar(cedula_file, banco_file, xml_zip, Decimal(str(tolerancia)), dias_tolerancia)
 
             st.divider()
             if st.session_state.reporte_excel:
@@ -137,13 +128,11 @@ class SATConciliatorApp:
         st.markdown('<div class="subtle">Conciliacion contable, fiscal y bancaria para cedulas de devolucion.</div>', unsafe_allow_html=True)
 
         resultado = st.session_state.resultado
-        cedula_ingresos = st.session_state.cedula_ingresos
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Egresos", len(st.session_state.cedula or []))
-        col2.metric("Ingresos", len(cedula_ingresos or []))
-        col3.metric("XML CFDI", len(st.session_state.cfdis or []))
-        col4.metric("Banco", len(st.session_state.movimientos or []))
-        col5.metric("Conciliados", resultado.conciliados if resultado else 0)
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Cedula", len(st.session_state.cedula or []))
+        col2.metric("XML CFDI", len(st.session_state.cfdis or []))
+        col3.metric("Banco", len(st.session_state.movimientos or []))
+        col4.metric("Conciliados", resultado.conciliados if resultado else 0)
 
         if resultado:
             self._mostrar_resultado(resultado)
@@ -171,75 +160,41 @@ class SATConciliatorApp:
         sin_xml_df = registros_df[registros_df["Estatus"] == "SIN XML"]
         sin_banco_df = registros_df[registros_df["Estatus"] == "SIN BANCO"]
 
-        tabs_list = ["Resumen", "Registros", "Diferencias", "Sin XML", "Sin banco", "Validacion"]
-        if st.session_state.cedula_ingresos:
-            tabs_list.insert(1, "Ingresos")
-        tabs = st.tabs(tabs_list)
-        tab_idx = 0
-        with tabs[tab_idx]:
+        tabs = st.tabs(["Resumen", "Registros", "Diferencias", "Sin XML", "Sin banco", "Validacion"])
+        with tabs[0]:
             st.dataframe(resumen_df, use_container_width=True, hide_index=True)
-        tab_idx += 1
-        if st.session_state.cedula_ingresos:
-            with tabs[tab_idx]:
-                st.dataframe(self._ingresos_df(st.session_state.cedula_ingresos), use_container_width=True, hide_index=True)
-            tab_idx += 1
-        with tabs[tab_idx]:
+        with tabs[1]:
             st.dataframe(registros_df, use_container_width=True, hide_index=True)
-        tab_idx += 1
-        with tabs[tab_idx]:
+        with tabs[2]:
             st.dataframe(diferencias_df, use_container_width=True, hide_index=True)
-        tab_idx += 1
-        with tabs[tab_idx]:
+        with tabs[3]:
             st.dataframe(sin_xml_df, use_container_width=True, hide_index=True)
-        tab_idx += 1
-        with tabs[tab_idx]:
+        with tabs[4]:
             st.dataframe(sin_banco_df, use_container_width=True, hide_index=True)
-        tab_idx += 1
-        with tabs[tab_idx]:
-            errores = st.session_state.errores
+        with tabs[5]:
+            errores = st.session_state.errores + resultado.errores
             if errores:
                 st.dataframe(pd.DataFrame({"Errores": errores}), use_container_width=True, hide_index=True)
             else:
                 st.success("No se registraron errores de procesamiento.")
 
-    def _procesar(self, cedula_file, ingresos_file, banco_file, xml_zip, moneda_banco, tolerancia: Decimal, dias_tolerancia: int) -> None:
+    def _procesar(self, cedula_file, banco_file, xml_zip, tolerancia: Decimal, dias_tolerancia: int) -> None:
         with st.spinner("Procesando conciliacion..."):
             cedula_parser = CedulaParser()
             banco_parser = BancoParser()
             xml_parser = XMLParser()
-            errores_totales: list[str] = []
 
-            # --- Parse egresos ---
-            cedula = cedula_parser.parsear_excel(cedula_file) if cedula_file else []
-            errores_totales.extend(cedula_parser.errores)
-
-            # --- Parse ingresos ---
-            cedula_ingresos = st.session_state.cedula_ingresos
-            if ingresos_file:
-                ingresos_parser = CedulaIngresosParser()
-                nuevo_hash = hash(ingresos_file.getvalue())
-                if st.session_state.ingresos_hash != nuevo_hash:
-                    cedula_ingresos = ingresos_parser.parsear_excel(ingresos_file)
-                    st.session_state.cedula_ingresos = cedula_ingresos
-                    st.session_state.ingresos_hash = nuevo_hash
-                    st.session_state.ingresos_folio_counter = 300
-                    st.info(f"Nueva cedula de Ingresos cargada: {len(cedula_ingresos)} registro(s)")
-                else:
-                    st.info(f"Cedula de Ingresos ya cargada: {len(cedula_ingresos)} registro(s)")
-                errores_totales.extend(ingresos_parser.errores)
-
-            # --- Parse banco ---
+            cedula = cedula_parser.parsear_excel(cedula_file)
+            
             if banco_file.name.lower().endswith('.pdf'):
                 movimientos = banco_parser.parsear_dataframe(st.session_state.pdf_df)
             else:
                 movimientos = banco_parser.parsear_excel(banco_file)
-            errores_totales.extend(banco_parser.errores)
-
-            # --- Parse ZIP ---
+                
             resultado_zip = xml_parser.parsear_zip(xml_zip.getvalue())
             cfdis = resultado_zip.exitosos
-            errores_totales.extend(xml_parser.errores)
 
+            # Resumen de procesamiento del ZIP
             st.info(f"ZIP procesado: {resultado_zip.total} archivo(s) XML encontrado(s), "
                     f"{resultado_zip.exitosos_count} exitoso(s), "
                     f"{resultado_zip.fallos_count} fallido(s).")
@@ -253,44 +208,26 @@ class SATConciliatorApp:
             if resultado_zip.total == 0:
                 st.warning("No se encontraron archivos .xml dentro del ZIP.")
 
-            # --- Conciliar egresos ---
             conciliador = Conciliador(tolerancia=tolerancia, dias_tolerancia=dias_tolerancia)
             resultado = conciliador.conciliar(cedula, cfdis, movimientos)
-            errores_totales.extend(resultado.errores)
 
-            # --- Conciliar ingresos ---
-            resultado_ingresos = None
-            if cedula_ingresos:
-                conc_ing = ConciliadorIngresos(tolerancia=tolerancia, dias_tolerancia=dias_tolerancia)
-                resultado_ingresos = conc_ing.conciliar(
-                    cedula_ingresos, cfdis, movimientos, moneda_banco,
-                )
-                folio = st.session_state.ingresos_folio_counter
-                for reg in resultado_ingresos.registros:
-                    if reg.moneda.upper() == moneda_banco.upper() and reg.cfdi is not None and reg.movimiento is not None and reg.folio_conciliacion is None:
-                        reg.folio_conciliacion = folio
-                        folio += 1
-                st.session_state.ingresos_folio_counter = folio
-                st.session_state.cedula_ingresos = resultado_ingresos.registros
-                errores_totales.extend(conc_ing.errores)
-
-            # --- Armar Excel ---
             registros_df = registros_a_dataframe(resultado)
-            datos_excel: dict[str, pd.DataFrame] = {
+            datos_excel = {
                 "RESUMEN": resumen_a_dataframe(resultado),
                 "CEDULA_SAT": registros_df,
                 "DETALLE_XML": self._cfdis_df(cfdis),
-                "ESTADOS_CUENTA": self._movimientos_df(movimientos, resultado, resultado_ingresos),
-                "VALIDACION": pd.DataFrame({"Errores": errores_totales}),
+                "ESTADOS_CUENTA": self._movimientos_df(movimientos, resultado),
+                "DIFERENCIAS": registros_df[registros_df["Estatus"].astype(str).str.contains("DIFERENCIA|FUERA|MONEDA|DUPLICADO", na=False)],
+                "SIN_XML": registros_df[registros_df["Estatus"] == "SIN XML"],
+                "SIN_BANCO": registros_df[registros_df["Estatus"] == "SIN BANCO"],
+                "VALIDACION": pd.DataFrame({"Errores": cedula_parser.errores + banco_parser.errores + xml_parser.errores + resultado.errores}),
             }
-            if resultado_ingresos:
-                datos_excel["CEDULA_INGRESOS"] = registros_ingresos_a_dataframe(resultado_ingresos)
 
             st.session_state.cedula = cedula
             st.session_state.cfdis = cfdis
             st.session_state.movimientos = movimientos
             st.session_state.resultado = resultado
-            st.session_state.errores = errores_totales
+            st.session_state.errores = cedula_parser.errores + banco_parser.errores + xml_parser.errores
             st.session_state.reporte_excel = ExcelGenerator().generar_excel_bytes(datos_excel)
             st.success("Conciliacion terminada.")
 
@@ -312,32 +249,10 @@ class SATConciliatorApp:
             ]
         )
 
-    def _ingresos_df(self, registros) -> pd.DataFrame:
-        return pd.DataFrame(
-            [
-                {
-                    "Folio": r.folio_conciliacion,
-                    "RFC": r.rfc,
-                    "Cliente": r.cliente,
-                    "UUID": r.uuid,
-                    "Factura": r.factura,
-                    "Fecha": r.fecha,
-                    "Total": float(r.total),
-                    "Moneda": r.moneda,
-                    "Estatus": r.estatus,
-                }
-                for r in registros
-            ]
-        )
-
-    def _movimientos_df(self, movimientos, resultado=None, resultado_ingresos=None) -> pd.DataFrame:
+    def _movimientos_df(self, movimientos, resultado=None) -> pd.DataFrame:
         folio_map: dict[int, int] = {}
         if resultado:
             for reg in resultado.registros:
-                if reg.folio_conciliacion and reg.movimiento:
-                    folio_map[id(reg.movimiento)] = reg.folio_conciliacion
-        if resultado_ingresos:
-            for reg in resultado_ingresos.registros:
                 if reg.folio_conciliacion and reg.movimiento:
                     folio_map[id(reg.movimiento)] = reg.folio_conciliacion
         return pd.DataFrame(
