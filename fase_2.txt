@@ -1,0 +1,47 @@
+FASE 2 — Investigación de parsers bancarios duplicados
+
+Antes de corregir ningún bug, necesito que investigues y me expliques la
+situación de los dos directorios de parsers bancarios que encontraste en
+la auditoría:
+
+- domains/banking/parsers/ (8 parsers: amex, bajio, banamex, banregio,
+  bbva, ibc, intercam, monex)
+- domains/normalization/parsers/ (los mismos 8 bancos)
+
+NO modifiques ni borres nada todavía. Mantente en modo de solo lectura /
+Plan mode para esta fase.
+
+Necesito que respondas estas preguntas concretas:
+
+1. ¿Cuál de los dos directorios está siendo importado y usado realmente
+   por el código en ejecución? Busca todos los imports de ambos paquetes
+   en todo el proyecto (backend/ y también en app.py y cualquier otro
+   punto de entrada fuera de backend/, como conciliacion/conciliador.py
+   o el flujo de Streamlit).
+
+2. ¿Los dos directorios producen el mismo resultado (mismo modelo de
+   datos de salida) o son incompatibles entre sí? Compara al menos un
+   parser de cada lado para el mismo banco (por ejemplo bbva_parser.py
+   de ambos directorios) y dime las diferencias reales de lógica, no
+   solo de nombre de archivo.
+
+3. ¿Hay algún indicio en el código (comentarios, nombres de branch si
+   hay historial de git, fechas de modificación de archivo) de cuál es
+   la versión más nueva o la que se pretendía mantener?
+
+4. ¿El archivo legacy_pdf_engine_backup.py (que la auditoría marcó como
+   "código muerto") tiene relación con alguno de los dos directorios de
+   parsers? ¿Es seguro eliminarlo?
+
+5. Verifica también si domains/normalization/parsers/base_parser.py y
+   domains/normalization/parsers/utils.py son usados solo por ese
+   directorio o si algo de banking/parsers/ también depende de ellos
+   (para saber si se pueden borrar juntos o hay dependencias cruzadas).
+
+Al final, dame una recomendación clara: ¿cuál directorio deberíamos
+conservar como la única fuente de verdad, y cuál podemos eliminar con
+seguridad? Si encuentras que NO es seguro eliminar ninguno todavía
+(por ejemplo, si distintas partes del sistema dependen de cada uno),
+dime exactamente qué habría que migrar primero antes de poder consolidar.
+
+No toques ningún archivo. Esto es solo investigación y diagnóstico.

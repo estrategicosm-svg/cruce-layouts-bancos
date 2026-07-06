@@ -1,0 +1,12 @@
+Sí, procede con:
+1. Eliminar domains/banking/ completo (incluyendo registry.py y los 8 stubs)
+2. Eliminar parsers/legacy_pdf_engine_backup.py
+3. NO toques parsers/legacy_pdf_engine.py ni domains/normalization/parsers/ —
+   este último lo vamos a evaluar por separado para una futura migración
+4. Elimina o marca como skip el test tests/test_phase3.py ya que prueba
+   código que se está eliminando
+5. Haz commit de este cambio como paso independiente, con un mensaje claro
+
+Antes de ejecutar, confírmame: ¿algún otro archivo importa algo de
+domains/banking/ que no hayas detectado? Verifica una vez más antes de
+borrar.
