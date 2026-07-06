@@ -1,0 +1,61 @@
+{
+  "matches": [
+    {
+      "transactions": [
+        {
+          "uuid": "TX-MOCK-1",
+          "statement_uuid": "STMT-1",
+          "fecha_operacion": "2026-07-04",
+          "monto_absoluto": "1160.00",
+          "naturaleza": "CARGO",
+          "moneda": "MXN",
+          "concepto_original": "PAGO FACTURA DUMMY-UUID-12345",
+          "referencia_bancaria_original": null,
+          "referencia_bancaria_limpia": "12345",
+          "clave_rastreo": null,
+          "numero_operacion": null,
+          "autorizacion": null
+        }
+      ],
+      "xmls": [
+        {
+          "uuid_cfdi": "DUMMY-UUID-12345",
+          "rfc_emisor": "PROVEEDOR",
+          "rfc_receptor": "TENANT1",
+          "tipo_cfdi": "I",
+          "metodo_pago": null,
+          "forma_pago": null,
+          "subtotal": "1000.00",
+          "impuestos_desglosados": {
+            "IVA": [
+              {
+                "TasaOCuota": "0.160000",
+                "Importe": "160.00"
+              }
+            ]
+          },
+          "total": "1160.00",
+          "estado_cancelacion": "VIGENTE"
+        }
+      ],
+      "partial_applied_amount": null,
+      "partial_remaining_amount": null,
+      "status": "EXACT",
+      "explanations": [
+        {
+          "rule_name": "UUID Match",
+          "description": "El UUID DUMMY-UUID-12345 fue encontrado directamente en el concepto bancario.",
+          "confidence_score": 1.0,
+          "details": {
+            "uuid": "DUMMY-UUID-12345"
+          }
+        }
+      ],
+      "strategy_used": "UUID",
+      "rules_applied": [],
+      "confidence": 1.0
+    }
+  ],
+  "unmatched_transactions": [],
+  "unmatched_xmls": []
+}

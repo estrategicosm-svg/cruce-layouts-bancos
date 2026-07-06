@@ -1,0 +1,220 @@
+[
+  {
+    "id": "019f2e4a-494f-7700-9f36-8f40e22f339f",
+    "tenant_id": "TENANT1",
+    "fecha": "2026-07-04",
+    "moneda": "MXN",
+    "status": "VALIDATED",
+    "document_uuid": null,
+    "transaction_uuid": null,
+    "xml_uuid": "DUMMY-UUID-12345",
+    "entries": [
+      {
+        "cuenta_contable": "105-01-000",
+        "tipo": "CARGO",
+        "monto": "1160.00",
+        "concepto": "Provisi\u00f3n Venta",
+        "referencia": null
+      },
+      {
+        "cuenta_contable": "401-01-000",
+        "tipo": "ABONO",
+        "monto": "1000.00",
+        "concepto": "Ingresos por Ventas",
+        "referencia": null
+      },
+      {
+        "cuenta_contable": "208-01-000",
+        "tipo": "ABONO",
+        "monto": "160.00",
+        "concepto": "IVA Trasladado",
+        "referencia": null
+      },
+      {
+        "cuenta_contable": "501-01-000",
+        "tipo": "CARGO",
+        "monto": "1000.00",
+        "concepto": "Provisi\u00f3n de Gasto/Egreso",
+        "referencia": null
+      },
+      {
+        "cuenta_contable": "118-01-000",
+        "tipo": "CARGO",
+        "monto": "160.00",
+        "concepto": "IVA Acreditable",
+        "referencia": null
+      },
+      {
+        "cuenta_contable": "201-01-000",
+        "tipo": "ABONO",
+        "monto": "1160.00",
+        "concepto": "Provisi\u00f3n de Proveedor",
+        "referencia": null
+      }
+    ],
+    "rule_results": [
+      {
+        "rule_name": "INGRESO_CFDI",
+        "applied": true,
+        "entries": [
+          {
+            "cuenta_contable": "105-01-000",
+            "tipo": "CARGO",
+            "monto": "1160.00",
+            "concepto": "Provisi\u00f3n Venta",
+            "referencia": null
+          },
+          {
+            "cuenta_contable": "401-01-000",
+            "tipo": "ABONO",
+            "monto": "1000.00",
+            "concepto": "Ingresos por Ventas",
+            "referencia": null
+          }
+        ],
+        "explanation": "Provisi\u00f3n de CFDI de Ingreso."
+      },
+      {
+        "rule_name": "IVA",
+        "applied": true,
+        "entries": [
+          {
+            "cuenta_contable": "208-01-000",
+            "tipo": "ABONO",
+            "monto": "160.00",
+            "concepto": "IVA Trasladado",
+            "referencia": null
+          }
+        ],
+        "explanation": "Provisi\u00f3n de IVA por 160.00"
+      },
+      {
+        "rule_name": "GASTO_CFDI",
+        "applied": true,
+        "entries": [
+          {
+            "cuenta_contable": "501-01-000",
+            "tipo": "CARGO",
+            "monto": "1000.00",
+            "concepto": "Provisi\u00f3n de Gasto/Egreso",
+            "referencia": null
+          }
+        ],
+        "explanation": "Provisi\u00f3n de Subtotal de Gasto."
+      },
+      {
+        "rule_name": "IVA_ACREDITABLE",
+        "applied": true,
+        "entries": [
+          {
+            "cuenta_contable": "118-01-000",
+            "tipo": "CARGO",
+            "monto": "160.00",
+            "concepto": "IVA Acreditable",
+            "referencia": null
+          }
+        ],
+        "explanation": "Provisi\u00f3n de IVA Acreditable por 160.00"
+      },
+      {
+        "rule_name": "PROVEEDOR_CFDI",
+        "applied": true,
+        "entries": [
+          {
+            "cuenta_contable": "201-01-000",
+            "tipo": "ABONO",
+            "monto": "1160.00",
+            "concepto": "Provisi\u00f3n de Proveedor",
+            "referencia": null
+          }
+        ],
+        "explanation": "Provisi\u00f3n de Total a Proveedor."
+      },
+      {
+        "rule_name": "PAGO_BANCOS",
+        "applied": false,
+        "entries": [],
+        "explanation": "No hay transacci\u00f3n bancaria asociada."
+      }
+    ]
+  },
+  {
+    "id": "019f2e4a-494f-7700-9f36-8f56bcf23671",
+    "tenant_id": "TENANT1",
+    "fecha": "2026-07-04",
+    "moneda": "MXN",
+    "status": "VALIDATED",
+    "document_uuid": null,
+    "transaction_uuid": "TX-MOCK-1",
+    "xml_uuid": null,
+    "entries": [
+      {
+        "cuenta_contable": "201-01-000",
+        "tipo": "CARGO",
+        "monto": "1160.00",
+        "concepto": "Pago a Proveedor",
+        "referencia": null
+      },
+      {
+        "cuenta_contable": "101-01-000",
+        "tipo": "ABONO",
+        "monto": "1160.00",
+        "concepto": "Salida de Banco",
+        "referencia": null
+      }
+    ],
+    "rule_results": [
+      {
+        "rule_name": "INGRESO_CFDI",
+        "applied": false,
+        "entries": [],
+        "explanation": "No es CFDI de Ingreso."
+      },
+      {
+        "rule_name": "IVA",
+        "applied": false,
+        "entries": [],
+        "explanation": "No hay impuestos desglosados en el CFDI."
+      },
+      {
+        "rule_name": "GASTO_CFDI",
+        "applied": false,
+        "entries": [],
+        "explanation": "No hay XML."
+      },
+      {
+        "rule_name": "IVA_ACREDITABLE",
+        "applied": false,
+        "entries": [],
+        "explanation": "No hay XML o impuestos desglosados."
+      },
+      {
+        "rule_name": "PROVEEDOR_CFDI",
+        "applied": false,
+        "entries": [],
+        "explanation": "No hay XML."
+      },
+      {
+        "rule_name": "PAGO_BANCOS_PAGO",
+        "applied": true,
+        "entries": [
+          {
+            "cuenta_contable": "201-01-000",
+            "tipo": "CARGO",
+            "monto": "1160.00",
+            "concepto": "Pago a Proveedor",
+            "referencia": null
+          },
+          {
+            "cuenta_contable": "101-01-000",
+            "tipo": "ABONO",
+            "monto": "1160.00",
+            "concepto": "Salida de Banco",
+            "referencia": null
+          }
+        ],
+        "explanation": "Registro de Pago."
+      }
+    ]
+  }
+]

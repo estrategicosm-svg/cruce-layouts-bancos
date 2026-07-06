@@ -1,0 +1,129 @@
+{
+  "summary": {
+    "tenant_id": "TENANT1",
+    "processing_run_id": "bc4a03c9-dad7-4fcd-b15d-f1611afee593",
+    "generated_at": "2026-07-05T01:05:00.609434",
+    "periodo": null,
+    "ejercicio": null
+  },
+  "metrics": {
+    "total_documentos": 1,
+    "total_xmls": 1,
+    "total_transacciones_bancarias": 0,
+    "total_polizas_cuadradas": 1,
+    "total_polizas_rechazadas": 0,
+    "cfdis_cancelados": 0,
+    "xmls_sin_conciliar": 1,
+    "transacciones_sin_conciliar": 0,
+    "matches_exactos": 0
+  },
+  "index": {
+    "entries": [
+      {
+        "section": "CARATULA",
+        "title": "Carátula",
+        "item_count": 1
+      },
+      {
+        "section": "RESUMEN",
+        "title": "Resumen Ejecutivo",
+        "item_count": 1
+      },
+      {
+        "section": "DOCUMENTOS",
+        "title": "Documentos Adjuntos",
+        "item_count": 1
+      },
+      {
+        "section": "CFDI",
+        "title": "CFDIs",
+        "item_count": 1
+      },
+      {
+        "section": "VALIDACIONES_SAT",
+        "title": "Resultados SAT",
+        "item_count": 1
+      },
+      {
+        "section": "POLIZAS",
+        "title": "Pólizas Contables",
+        "item_count": 1
+      },
+      {
+        "section": "CONCILIACION",
+        "title": "Conciliación",
+        "item_count": 1
+      },
+      {
+        "section": "WORKFLOW",
+        "title": "Historial Workflow",
+        "item_count": 1
+      },
+      {
+        "section": "OBSERVACIONES",
+        "title": "Observaciones Generadas",
+        "item_count": 1
+      }
+    ]
+  },
+  "documentos": [
+    {
+      "id": "241bfc4c-a2cd-4af8-b230-44c61cfa5df4",
+      "type": "XML",
+      "storage_url": "dummy_sample.xml",
+      "version": 1,
+      "hash_sha256": "72a5232f2f44c3bf3dbbf94a57626466d3f70850e96391af78cc52e7d7c3af8f"
+    }
+  ],
+  "xmls_raw": [
+    {
+      "id": "47333d02-d3dd-4a52-8315-c16a60cf1a2c",
+      "uuid_cfdi": "SAMPLE-UUID-77777",
+      "rfc_emisor": "PROVEEDOR_MUESTRA",
+      "rfc_receptor": "TENANT1",
+      "total": "5800.00"
+    }
+  ],
+  "transacciones_bancarias_raw": [],
+  "resultados_sat": [
+    {
+      "xml_uuid": "47333d02-d3dd-4a52-8315-c16a60cf1a2c",
+      "overall_status": "PASS"
+    }
+  ],
+  "resultados_conciliacion": [
+    {
+      "id": "30ed30d5-c013-49c5-8dbd-40b34a1671a3",
+      "matches_exactos": 0,
+      "unmatched_xmls": [
+        "SAMPLE-UUID-77777"
+      ],
+      "unmatched_transactions": []
+    }
+  ],
+  "polizas": [
+    {
+      "id": "f128041d-7e9d-4805-b464-ad5c0f766a33",
+      "fecha": "2026-07-04",
+      "source_uuid": "SAMPLE-UUID-77777",
+      "es_cuadrada": true,
+      "total_cargos": "11600.00",
+      "total_abonos": "11600.00"
+    }
+  ],
+  "eventos_workflow": [
+    {
+      "document_id": "241bfc4c-a2cd-4af8-b230-44c61cfa5df4",
+      "estado": "RECEIVED",
+      "timestamp": "2026-07-05T01:05:00.591031"
+    }
+  ],
+  "observaciones": [
+    {
+      "section": "CONCILIACION",
+      "severity": "WARNING",
+      "message": "XML SAMPLE-UUID-77777 sin conciliar.",
+      "item_id": "SAMPLE-UUID-77777"
+    }
+  ]
+}

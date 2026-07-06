@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from dataclasses import asdict
+
+import pandas as pd
+
+from core.models import ResultadoConciliacion
+
+
+def registros_a_dataframe(resultado: ResultadoConciliacion) -> pd.DataFrame:
+    filas = []
+    for registro in resultado.registros:
+        filas.append(
+            {
+                "Poliza": registro.poliza,
+                "Cliente": registro.cliente,
+                "RFC": registro.rfc,
+                "UUID": registro.uuid,
+                "Importe": float(registro.importe),
+                "IVA": float(registro.iva),
+                "Moneda": registro.moneda,
+                "Fecha pago": registro.fecha_pago,
+                "Banco": registro.banco,
+                "Cruce bancario": registro.cruce_bancario,
+                "Estatus": registro.estatus,
+                "Observaciones": registro.observaciones,
+                "XML total": float(registro.cfdi.total) if registro.cfdi else None,
+                "Banco monto": float(registro.movimiento.monto) if registro.movimiento else None,
+            }
+        )
+    return pd.DataFrame(filas)
+
+
+def resumen_a_dataframe(resultado: ResultadoConciliacion) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {"Metrica": "Total registros", "Valor": resultado.total_registros},
+            {"Metrica": "Conciliados", "Valor": resultado.conciliados},
+            {"Metrica": "Diferencias", "Valor": resultado.diferencias},
+            {"Metrica": "Sin XML", "Valor": resultado.sin_xml},
+            {"Metrica": "Sin banco", "Valor": resultado.sin_banco},
+            {"Metrica": "Total importe", "Valor": float(resultado.total_importe)},
+            {"Metrica": "Total conciliado", "Valor": float(resultado.total_conciliado)},
+            {"Metrica": "Total diferencia", "Valor": float(resultado.total_diferencia)},
+        ]
+    )

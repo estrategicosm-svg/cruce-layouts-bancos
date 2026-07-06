@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional
+
+
+@dataclass
+class CFDI:
+    uuid: str
+    rfc_emisor: str
+    rfc_receptor: str
+    nombre_emisor: str
+    nombre_receptor: str
+    fecha: datetime
+    subtotal: Decimal
+    iva: Decimal
+    iva_retenido: Decimal
+    isr_retenido: Decimal
+    total: Decimal
+    moneda: str
+    tipo_cambio: Decimal
+    tipo_cfdi: str
+    metodo_pago: str
+    forma_pago: str
+    serie: Optional[str] = None
+    folio: Optional[str] = None
+    archivo: Optional[str] = None
+    validado: bool = False
+    errores: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MovimientoBancario:
+    banco: str
+    cuenta: str
+    fecha: datetime
+    concepto: str
+    cargo: Decimal
+    abono: Decimal
+    moneda: str
+    referencia: str
+    clave_rastreo: str = ""
+    autorizacion: str = ""
+    num_operacion: str = ""
+    cruce_bancario: str = ""
+    monto: Decimal = Decimal("0")
+
+    def __post_init__(self) -> None:
+        self.monto = self.abono - self.cargo
+        if not self.cruce_bancario:
+            self.cruce_bancario = self.referencia
+
+
+@dataclass
+class CedulaRegistro:
+    poliza: str
+    cliente: str
+    rfc: str
+    uuid: str
+    importe: Decimal
+    base_iva_16: Decimal
+    base_iva_8: Decimal
+    base_iva_0: Decimal
+    exentos: Decimal
+    iva: Decimal
+    retenciones: Decimal
+    moneda: str
+    tipo_cambio: Decimal
+    fecha_pago: datetime
+    banco: str
+    cruce_bancario: str
+    estatus: Optional[str] = None
+    observaciones: Optional[str] = None
+    cfdi: Optional[CFDI] = None
+    movimiento: Optional[MovimientoBancario] = None
+
+
+@dataclass
+class ResultadoConciliacion:
+    total_registros: int
+    conciliados: int
+    diferencias: int
+    sin_xml: int
+    sin_banco: int
+    errores: list[str]
+    registros: list[CedulaRegistro]
+    total_importe: Decimal
+    total_conciliado: Decimal
+    total_diferencia: Decimal
+    tiempo_procesamiento: float

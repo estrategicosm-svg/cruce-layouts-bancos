@@ -1,0 +1,5 @@
+fastapi[all]
+SQLAlchemy==2.0.31
+alembic
+PyJWT
+psycopg2-binary

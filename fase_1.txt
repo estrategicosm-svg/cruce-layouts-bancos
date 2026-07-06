@@ -1,0 +1,68 @@
+Necesito que corrijas un bug crítico en backend/use_cases/process_files.py
+alrededor de la línea 153, dentro de ProcessFilesAndPersistUseCase.
+
+PROBLEMA ACTUAL:
+    try:
+        domain_xml = self._parse_cfdi(path)
+        xmls_to_process.append((doc_orm, domain_xml))
+    except Exception as e:
+        pass  # el error se pierde completamente, sin log, sin registro
+
+Este código traga cualquier error de parseo de XML sin dejar rastro. El
+documento queda marcado como RECEIVED en la base de datos pero nunca se
+procesa realmente, y nadie se entera de que falló.
+
+LO QUE NECESITO QUE HAGAS:
+
+1. Antes de hacer el cambio, muéstrame el archivo completo
+   process_files.py para que yo entienda el contexto del método execute()
+   y de doc_orm (qué campos tiene, si ya existe un campo de status o
+   error).
+
+2. Agrega logging real:
+   - Si infrastructure/observability/ está vacío, crea un logger básico
+     usando el módulo estándar `logging` de Python (no una librería
+     externa nueva, para no agregar dependencias). Un logger simple que
+     escriba a consola y a un archivo backend/logs/app.log es suficiente
+     por ahora.
+   - En el except, registra: el nombre/ruta del archivo XML que falló,
+     el tipo de excepción, el mensaje de error completo, y el
+     processing_run_id actual.
+
+3. No dejes que el documento quede en estado RECEIVED silenciosamente.
+   En vez de eso:
+   - Cambia doc_orm.status (o el campo equivalente que tenga el modelo)
+     a un estado de fallo, por ejemplo FAILED o PARSE_ERROR — usa el
+     enum de status que ya exista en el proyecto, no inventes uno nuevo
+     si ya hay uno definido en domains/.
+   - Si existe un sistema de WorkflowEvent (vi que se menciona en la
+     auditoría), registra un evento de tipo FAILED con el motivo del
+     error, para mantener trazabilidad.
+
+4. El use case NO debe detener todo el batch por un solo XML fallido.
+   Debe seguir procesando los demás archivos, pero al final del método
+   execute() debe:
+   - Incluir en el resultado que retorna cuántos documentos fallaron y
+     cuáles (nombre de archivo o UUID).
+   - Si TODOS los documentos del batch fallaron, marcar el
+     processing_run_id completo como FAILED, no como exitoso.
+
+5. Aplica el MISMO patrón (logging + marcar fallo, sin tragar excepción)
+   en cualquier otro lugar del archivo donde encuentres un
+   except Exception: pass o similar — dime primero dónde los encontraste
+   antes de tocarlos.
+
+6. Actualiza o crea un test en tests/use_cases/test_process_files.py que
+   verifique específicamente: un XML corrupto/mal formado en el batch no
+   detiene el proceso, se registra el error, el documento queda en
+   estado de fallo, y el resultado final refleja el conteo de fallos.
+
+7. Antes de aplicar cambios, haz un backup del archivo original (algo
+   como process_files.py.bak) por si necesito revertir.
+
+8. Muéstrame un resumen de TODOS los cambios que hiciste al final,
+   archivo por archivo, antes de que yo decida hacer commit.
+
+No toques nada más del proyecto que no esté directamente relacionado con
+este bug. Ve paso a paso y pídeme confirmación antes de cada cambio
+importante si tienes dudas.

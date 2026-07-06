@@ -1,0 +1,66 @@
+Actúa como un auditor técnico senior de sistemas fiscales críticos. Necesito
+que audites TODO el proyecto sat_conciliador_iva de forma exhaustiva, revisando
+cada módulo, y que me entregues un informe honesto y detallado — no solo un
+resumen superficial.
+
+Estructura del informe:
+
+1. RESUMEN EJECUTIVO
+   - ¿El sistema es funcional end-to-end en su estado actual? (sí/no/parcial)
+   - ¿Qué tan listo está para producción? (prototipo / beta / listo)
+
+2. ARQUITECTURA
+   - Evalúa la separación por dominios (domains/, infrastructure/,
+     use_cases/, application/). ¿Está bien aplicada o hay violaciones
+     de capas (ej. infraestructura filtrándose a domains)?
+   - ¿Hay acoplamiento excesivo entre módulos?
+
+3. CORRECTITUD DE NEGOCIO (lo más importante)
+   - Revisa la lógica de conciliación de CFDI/XML contra pólizas contables.
+   - Revisa GenerateTaxFileUseCase: ¿recupera bien los datos por
+     processing_run_id? ¿Qué pasa si hay múltiples runs o runs incompletos?
+   - Revisa cómo se detectan: XMLs faltantes, pólizas rechazadas, CFDIs
+     cancelados. Dame ejemplos concretos de casos borde que el código
+     NO contempla.
+   - Revisa AuditFile, AuditIndex, AuditSummary, AuditMetrics: ¿reflejan
+     fielmente el estado real de los datos o pueden generar falsos positivos/
+     negativos?
+
+4. INTEGRIDAD DE DATOS
+   - Uso de SQLAlchemy: ¿hay transacciones atómicas donde se necesitan?
+   - ¿Existe riesgo de datos duplicados, huérfanos, o inconsistentes entre
+     tablas relacionadas?
+   - ¿Qué pasa si el proceso se interrumpe a la mitad (ej. corte de luz,
+     error no capturado)?
+
+5. COBERTURA DE PRUEBAS
+   - Revisa test_phase2.py hasta test_phase10.py, test_generate_tax_file.py,
+     test_process_files.py.
+   - ¿Qué porcentaje del código de negocio real está cubierto?
+   - Lista específicamente qué escenarios de negocio NO tienen prueba
+     (con nombre de archivo/función donde debería ir).
+   - ¿Las pruebas existentes son pruebas reales o solo comprueban que
+     "no truena"?
+
+6. MANEJO DE ERRORES
+   - ¿Qué pasa si un XML viene corrupto o mal formado?
+   - ¿Qué pasa si falta un documento esperado?
+   - ¿Los errores se registran (logging) o se tragan silenciosamente?
+
+7. SEGURIDAD
+   - Manejo de credenciales del SAT: ¿están hardcodeadas, en .env, en
+     texto plano en algún lado?
+   - Manejo de rutas de archivos: ¿hay riesgo de path traversal?
+   - Consultas SQL: ¿usan parámetros o hay riesgo de inyección?
+
+8. DEUDA TÉCNICA Y CALIDAD DE CÓDIGO
+   - Código duplicado, funciones demasiado largas, nombres poco claros.
+   - Dependencias circulares o mal organizadas.
+
+9. LISTADO DE HALLAZGOS PRIORIZADOS
+   Formato tabla: [Severidad: Crítico/Alto/Medio/Bajo] | [Archivo:línea] |
+   [Descripción del problema] | [Por qué importa] | [Sugerencia de arreglo]
+
+No modifiques ningún archivo todavía — solo audita y repórtame. Sé directo:
+si algo está mal, dilo claramente, no lo suavices. Si algo está bien hecho,
+dilo también.

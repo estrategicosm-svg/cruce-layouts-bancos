@@ -1,0 +1,24 @@
+[
+  {
+    "uuid_cfdi": "DUMMY-UUID-12345",
+    "overall_status": "PASS",
+    "results": [
+      {
+        "rule_name": "IVA_VALIDATION",
+        "version": "1.0",
+        "status": "PASS",
+        "severity": "LOW",
+        "explanation": "Tasas de IVA v\u00e1lidas: ['0.160000']",
+        "details": {}
+      },
+      {
+        "rule_name": "CFDI_STATUS",
+        "version": "1.0",
+        "status": "PASS",
+        "severity": "LOW",
+        "explanation": "El CFDI est\u00e1 VIGENTE localmente.",
+        "details": {}
+      }
+    ]
+  }
+]

@@ -1,0 +1,7 @@
+bancos:
+  generico:
+    fecha: ["fecha", "fecha operacion", "fecha de operacion"]
+    concepto: ["concepto", "descripcion", "detalle"]
+    cargo: ["cargo", "retiro", "debe"]
+    abono: ["abono", "deposito", "haber"]
+    referencia: ["referencia", "ref", "cruce bancario", "clave rastreo"]

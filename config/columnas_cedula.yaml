@@ -1,0 +1,35 @@
+columnas_cedula:
+  poliza: "Numero de poliza contable"
+  cliente: "Nombre del cliente/proveedor"
+  rfc: "RFC"
+  uuid: "UUID"
+  importe: "Importe"
+  base_iva_16: "Base IVA 16%"
+  base_iva_8: "Base IVA 8%"
+  base_iva_0: "Base IVA 0%"
+  exentos: "Exentos"
+  iva: "IVA"
+  retenciones: "Retenciones"
+  moneda: "Moneda"
+  tipo_cambio: "Tipo de cambio"
+  fecha_pago: "Fecha de pago"
+  banco: "Banco"
+  cruce_bancario: "Cruce bancario"
+
+tipos_datos:
+  poliza: str
+  cliente: str
+  rfc: str
+  uuid: str
+  importe: float
+  base_iva_16: float
+  base_iva_8: float
+  base_iva_0: float
+  exentos: float
+  iva: float
+  retenciones: float
+  moneda: str
+  tipo_cambio: float
+  fecha_pago: datetime
+  banco: str
+  cruce_bancario: str
