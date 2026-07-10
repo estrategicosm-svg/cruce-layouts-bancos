@@ -12,8 +12,9 @@ GRUPO_ID vincula registros de la misma POLIZA.
 
 Cada movimiento bancario se identifica univocamente con MOVIMIENTO_ID.
 """
-
 from __future__ import annotations
+
+import re
 
 import hashlib
 import logging
@@ -181,10 +182,22 @@ def _movimiento_id_hash(mov, archivo_banco: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16].upper()
 
 
+_REF_TRUNCADAS_INVALIDAS = {
+    "ERENCIA", "ORIZADA", "REFERENCIA", "AUTORIZADA", "AUTORIZACION",
+    "REFERNCIA", "REFENCIA", "OPERACION", "OPERACIÓN"
+}
+_REF_TRUNCADAS_REGEX = re.compile(
+    r"^(?:ERENCIA|ORIZADA|REFERNCIA|REFENCIA|REFERENCIA|AUTORIZADA|AUTORIZACION)$",
+    re.IGNORECASE
+)
+
+
 def _clasificar_referencia(ref: str, concepto: str) -> str:
     if not ref:
         return "SIN_REFERENCIA_VISIBLE"
     ref_upper = ref.strip().upper()
+    if ref_upper in _REF_TRUNCADAS_INVALIDAS or _REF_TRUNCADAS_REGEX.match(ref_upper):
+        return "SIN_REFERENCIA_VISIBLE"
     if ref_upper.startswith("CLABE") or len(ref_upper) == 18 and ref_upper.isdigit():
         return "CLAVE_RASTREO_EXPLICITA"
     if ref_upper.startswith("T+") or "WIRE" in ref_upper:

@@ -629,12 +629,32 @@ def parse_ibc_statement(pages_words, file_name, method_used):
     return valid_transactions, text_bruto, warnings_log, recap_data
 
 
+BAJIO_REF_INVALIDAS = {"ERENCIA", "ORIZADA", "REFERENCIA", "AUTORIZADA", "AUTORIZACION",
+                        "REFERNCIA", "REFENCIA", "OPERACION", "OPERACIÓN"}
+
+BAJIO_REF_PREFIX_INVALIDAS = re.compile(
+    r"^(?:ERENCIA|ORIZADA|REFERNCIA|REFENCIA|REFERENCIA|AUTORIZADA|AUTORIZACION)$",
+    re.IGNORECASE
+)
+
+_RE_PATTERNS_BAJIO_AMOUNTS = re.compile(r"\$\s*([\d,]+\.\d{2})")
+
+
+def _extraer_importes_bajio(line_str):
+    montos = _RE_PATTERNS_BAJIO_AMOUNTS.findall(line_str)
+    if len(montos) >= 2:
+        return clean_number(montos[0]), clean_number(montos[1])
+    if len(montos) == 1:
+        return clean_number(montos[0]), None
+    return None, None
+
+
 def parse_bajio_statement(pages_words, file_name, method_used):
     transactions = []
     recap_data = {}
     warnings_log = []
     text_bruto = []
-    
+
     cuenta = ""
     periodo = ""
     fecha_corte = ""
@@ -642,16 +662,14 @@ def parse_bajio_statement(pages_words, file_name, method_used):
     total_credits = 0.0
     total_debits = 0.0
     closing_bal = 0.0
-    
-    columns = [
-        ("Fecha", 0, 55),
-        ("Concepto", 55, 380),
-        ("Monto", 380, 500),
-        ("Saldo", 500, 650)
+
+    columns_fecha_concepto = [
+        ("Fecha", 0, 60),
+        ("Concepto", 60, 999),
     ]
-    
+
     current_tx = None
-    
+
     for page_num_idx, page_lines in enumerate(pages_words):
         page_num = page_num_idx + 1
         page_text_lines = []
@@ -659,106 +677,137 @@ def parse_bajio_statement(pages_words, file_name, method_used):
             line_str = " ".join([w['text'] for w in line]).strip()
             page_text_lines.append(line_str)
         page_text = "\n".join(page_text_lines)
-        
+
         text_bruto.append({
             'Archivo': file_name,
             'Pagina': page_num,
             'Metodo': method_used,
             'Texto': page_text
         })
-        
+
         if "CUENTA" in page_text.upper() and "BANBAJIO" in page_text.upper() and not cuenta:
             m_ct = re.search(r"CUENTA\s+(?:CONECTA\s+BANBAJIO)?\s*(\d{10,})", page_text, re.IGNORECASE)
             if m_ct:
                 cuenta = m_ct.group(1)
-        
+
         if "PERIODO:" in page_text.upper() and not periodo:
             m_per = re.search(r"PERIODO:\s*(.*)", page_text, re.IGNORECASE)
             if m_per:
                 periodo = m_per.group(1).strip()
-                
+
         if "FECHA DE CORTE" in page_text.upper() and not fecha_corte:
             m_fc = re.search(r"FECHA DE CORTE\s+(.*)", page_text, re.IGNORECASE)
             if m_fc:
                 fecha_corte = m_fc.group(1).strip()
-                
-        m_recap = re.search(r"\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})", page_text)
+
+        m_recap = re.search(
+            r"\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})",
+            page_text
+        )
         if m_recap and "SALDO" not in m_recap.group(0).upper():
             if beg_bal == 0.0 and closing_bal == 0.0:
                 beg_bal = clean_number(m_recap.group(1))
                 total_credits = clean_number(m_recap.group(2))
                 total_debits = clean_number(m_recap.group(3))
                 closing_bal = clean_number(m_recap.group(4))
-                    
+
         if "RESUMEN DE COMISIONES" in page_text.upper() or "SALDO MINIMO" in page_text.upper():
             if current_tx:
                 transactions.append(current_tx)
                 current_tx = None
             continue
-                
+
         for line in page_lines:
             line_str = " ".join([w['text'] for w in line]).strip()
             line_str_upper = line_str.upper()
-            
+
             if not line_str:
                 continue
-            
+
             if line[0]['top'] < 105.0:
                 continue
-                
-            row_text, row_words = partition_line(line, columns)
+
+            row_text, _ = partition_line(line, columns_fecha_concepto)
             fecha_col = row_text.get("Fecha", "").strip()
-            
+
             m_fecha = re.match(r"^(\d{1,2}\s+[A-Za-z]{3})", fecha_col)
-            
+
             if m_fecha:
                 if current_tx:
                     transactions.append(current_tx)
-                    
-                monto_str = row_text.get("Monto", "").strip()
-                saldo_str = row_text.get("Saldo", "").strip()
+
                 concepto_str = row_text.get("Concepto", "").strip()
-                
-                monto_val = clean_number(monto_str)
-                saldo_val = clean_number(saldo_str)
-                
+
+                monto_val, saldo_val = _extraer_importes_bajio(line_str)
+
                 year = "2024"
                 m_year = re.search(r"(\d{4})", fecha_corte)
-                if m_year: year = m_year.group(1)
-                elif m_year := re.search(r"(\d{4})", periodo): year = m_year.group(1)
-                
+                if m_year:
+                    year = m_year.group(1)
+                else:
+                    m_year = re.search(r"(\d{4})", periodo)
+                    if m_year:
+                        year = m_year.group(1)
+
                 parts = fecha_col.split()
                 day = int(parts[0])
-                meses = {"ENE":1, "FEB":2, "MAR":3, "ABR":4, "MAY":5, "JUN":6, "JUL":7, "AGO":8, "SEP":9, "OCT":10, "NOV":11, "DIC":12}
+                meses = {
+                    "ENE": 1, "FEB": 2, "MAR": 3, "ABR": 4, "MAY": 5, "JUN": 6,
+                    "JUL": 7, "AGO": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DIC": 12
+                }
                 month = meses.get(parts[1].upper()[:3], 1)
                 fecha_clean = f"{day:02d}/{month:02d}/{year}"
-                
+
                 concepto_upper = concepto_str.upper()
-                is_deposito = any(kw in concepto_upper for kw in ["DEPOSITO", "DEPÓSITO", "DEP?SITO", "DEP?SITO", "DEPOSITOS", "NOMINA", "NÓMINA"])
-                is_retiro = any(kw in concepto_upper for kw in ["ENVIO", "ENVÍO", "ENV?O", "COMISION", "COMISIÓN", "IVA", "TRASPASO DE RECURSOS"])
-                
-                if monto_val is not None:
+                is_deposito = any(kw in concepto_upper for kw in [
+                    "DEPOSITO", "DEPÓSITO", "DEPOSITOS", "NOMINA", "NÓMINA"
+                ])
+                is_retiro = any(kw in concepto_upper for kw in [
+                    "ENVIO", "ENVÍO", "COMISION", "COMISIÓN",
+                    "TRASPASO DE RECURSOS"
+                ])
+                is_comision = any(kw in concepto_upper for kw in [
+                    "COMISION", "COMISIÓN"
+                ])
+                is_iva = concepto_upper.startswith("IVA") or " IVA " in concepto_upper
+
+                cargo_val = None
+                abono_val = None
+                clasificacion_interna = ""
+
+                if monto_val is not None and monto_val > 0:
                     if is_deposito and not is_retiro:
                         abono_val = monto_val
-                        cargo_val = None
-                    elif is_retiro and not is_deposito:
+                        clasificacion_interna = "MOVIMIENTO_REAL"
+                    elif is_retiro:
                         cargo_val = monto_val
-                        abono_val = None
+                        clasificacion_interna = "MOVIMIENTO_REAL"
                     else:
-                        cargo_val = None
-                        abono_val = monto_val
+                        cargo_val = monto_val
+                        clasificacion_interna = "MOVIMIENTO_REAL"
+                elif monto_val is not None and monto_val == 0:
+                    clasificacion_interna = "IMPORTE_CERO"
                 else:
-                    cargo_val = None
-                    abono_val = None
-                
+                    clasificacion_interna = "IMPORTE_CERO"
+
+                if is_iva and clasificacion_interna == "MOVIMIENTO_REAL":
+                    clasificacion_interna = "IVA_DE_COMISION"
+                elif is_comision and clasificacion_interna == "MOVIMIENTO_REAL":
+                    clasificacion_interna = "COMISION"
+
                 ref_str = ""
-                m_ref = re.search(r"(?:REF\.?|RASTREO:?)\s*([A-Za-z0-9\-]{6,})", line_str, re.IGNORECASE)
+                m_ref = re.search(r"\b(\d{7,})\b", line_str)
                 if m_ref:
-                    ref_str = m_ref.group(1)
-                m_ref2 = re.search(r"\b(\d{7,})\b", line_str)
-                if not ref_str and m_ref2:
-                    ref_str = m_ref2.group(1)
-                
+                    candidate = m_ref.group(1)
+                    if not BAJIO_REF_PREFIX_INVALIDAS.match(candidate):
+                        ref_str = candidate
+
+                advertencias = []
+                es_real = clasificacion_interna in ("MOVIMIENTO_REAL", "COMISION", "IVA_DE_COMISION")
+                if clasificacion_interna == "IMPORTE_CERO":
+                    advertencias.append("Sin importe valido en la linea")
+                    es_real = False
+
                 current_tx = {
                     'banco': 'BAJIO',
                     'archivo': file_name,
@@ -777,27 +826,39 @@ def parse_bajio_statement(pages_words, file_name, method_used):
                     'importe_3': None,
                     'original_fecha': fecha_col,
                     'original_concepto': concepto_str,
-                    'original_cargo': monto_str if cargo_val else '',
-                    'original_abono': monto_str if abono_val else '',
-                    'original_saldo': saldo_str,
-                    'confianza': 100.0,
-                    'advertencias': [],
-                    'metadata': ''
+                    'original_cargo': str(monto_val) if cargo_val else '',
+                    'original_abono': str(monto_val) if abono_val else '',
+                    'original_saldo': str(saldo_val) if saldo_val else '',
+                    'confianza': 100.0 if es_real else 0.0,
+                    'advertencias': advertencias,
+                    'metadata': clasificacion_interna,
+                    'es_movimiento_real': es_real,
                 }
             elif current_tx:
                 conc = row_text.get("Concepto", "").strip()
                 if conc and len(conc) > 2:
+                    sub_cargo, sub_abono = _extraer_importes_bajio(line_str)
+                    if sub_cargo and sub_cargo > 0 and current_tx['cargo'] is None and current_tx['abono'] is None:
+                        concepto_upper_prev = current_tx['concepto'].upper()
+                        if any(kw in concepto_upper_prev for kw in ["ENVIO", "ENVÍO", "TRASPASO"]):
+                            current_tx['cargo'] = sub_cargo
+                            current_tx['importe_detectado'] = sub_cargo
+                        elif any(kw in concepto_upper_prev for kw in ["DEPOSITO", "DEPÓSITO", "NOMINA"]):
+                            current_tx['abono'] = sub_cargo
+                            current_tx['importe_detectado'] = sub_cargo
                     current_tx['concepto'] += " " + conc
                     current_tx['original_concepto'] += " " + conc
-                
+
                 if not current_tx.get('referencia'):
-                    m_ref = re.search(r"(?:REF\.?|RASTREO:?)\s*([A-Za-z0-9\-]{6,})", line_str, re.IGNORECASE)
+                    m_ref = re.search(r"\b(\d{7,})\b", line_str)
                     if m_ref:
-                        current_tx['referencia'] = m_ref.group(1)
-                    
+                        candidate = m_ref.group(1)
+                        if not BAJIO_REF_PREFIX_INVALIDAS.match(candidate):
+                            current_tx['referencia'] = candidate
+
     if current_tx:
         transactions.append(current_tx)
-        
+
     recap_data = {
         'banco': 'BAJIO',
         'cuenta': cuenta,
@@ -810,14 +871,18 @@ def parse_bajio_statement(pages_words, file_name, method_used):
         'total_debits': total_debits,
         'closing_balance': closing_bal
     }
-    
+
     valid_transactions = []
     for tx in transactions:
-        if tx['cargo'] is None and tx['abono'] is None:
-            tx['advertencias'].append("No se detectaron importes")
-            tx['confianza'] = min(tx['confianza'], 50.0)
+        has_cargo = tx['cargo'] is not None and tx['cargo'] > 0
+        has_abono = tx['abono'] is not None and tx['abono'] > 0
+        if not has_cargo and not has_abono:
+            tx['advertencias'].append("Sin importe valido — no se cuenta como movimiento")
+            tx['confianza'] = 0.0
+            tx['metadata'] = tx.get('metadata', '') or 'IMPORTE_CERO'
+            tx['es_movimiento_real'] = False
         valid_transactions.append(tx)
-    
+
     return valid_transactions, text_bruto, warnings_log, recap_data
 
 def parse_banamex_statement(pages_words, file_name, method_used):

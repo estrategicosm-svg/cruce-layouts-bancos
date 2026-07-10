@@ -219,8 +219,8 @@ class TestLecturaDatos:
     def test_756_egresos_leidos(self, real_data):
         assert len(real_data["egresos"]) == 756
 
-    def test_1003_movimientos_cargados(self, real_data):
-        assert len(real_data["movimientos"]) == 1003
+    def test_1000_movimientos_cargados(self, real_data):
+        assert len(real_data["movimientos"]) == 1000
 
 
 # =========================================================================
@@ -368,7 +368,7 @@ class TestMovimientosArchivoFila:
                 assert r.FILA_BANCO > 0, f"FILA_BANCO=0: {r.GRUPO_ID}"
 
     def test_universo_movimientos_completo(self, real_result):
-        assert len(real_result.movimientos_universo) == 1003
+        assert len(real_result.movimientos_universo) == 1000
         for m in real_result.movimientos_universo:
             assert m.MOVIMIENTO_ID
             assert m.ARCHIVO_BANCO

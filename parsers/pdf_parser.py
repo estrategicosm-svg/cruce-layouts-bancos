@@ -4,6 +4,16 @@ import re
 import pandas as pd
 from parsers.legacy_pdf_engine import process_single_pdf
 
+REF_TRUNCADAS_INVALIDAS = {
+    "ERENCIA", "ORIZADA", "REFERENCIA", "AUTORIZADA", "AUTORIZACION",
+    "REFERNCIA", "REFENCIA", "OPERACION", "OPERACIÓN"
+}
+
+REF_TRUNCADAS_REGEX = re.compile(
+    r"^(?:ERENCIA|ORIZADA|REFERNCIA|REFENCIA|REFERENCIA|AUTORIZADA|AUTORIZACION)$",
+    re.IGNORECASE
+)
+
 class BancoPDFParser:
     COLUMNAS_ESPERADAS = [
         'Archivo Origen', 'Banco', 'Cuenta', 'Moneda', 'Fecha',
@@ -35,6 +45,8 @@ class BancoPDFParser:
         movs = resultado.get("transacciones", [])
         real_movs = [m for m in movs if m.get("es_movimiento_real", True)]
         
+        real_movs = [m for m in real_movs if float(m.get("cargo") or 0) > 0 or float(m.get("abono") or 0) > 0]
+        
         df_movs = pd.DataFrame(real_movs)
         df_export = pd.DataFrame(columns=self.COLUMNAS_ESPERADAS)
         
@@ -46,24 +58,22 @@ class BancoPDFParser:
             df_export['Cuenta'] = [recap.get("cuenta", "")] * len(real_movs)
             df_export['Moneda'] = [recap.get("moneda", "MXN")] * len(real_movs)
             
-            
             df_export['Fecha'] = df_movs.get('fecha', pd.Series([None]*len(real_movs)))
             df_export['Concepto'] = df_movs.get('concepto', pd.Series(['']*len(real_movs)))
             
-            # Buscar referencia limpia dentro del concepto sin alterarlo
             referencias_limpias = []
-            for concepto in df_export['Concepto']:
-                texto = str(concepto).upper()
+            for mov in real_movs:
+                ref_parser = str(mov.get('referencia', '') or '').strip()
+                if ref_parser and ref_parser.upper() not in REF_TRUNCADAS_INVALIDAS and not REF_TRUNCADAS_REGEX.match(ref_parser):
+                    referencias_limpias.append(ref_parser)
+                    continue
+                concepto = str(mov.get('concepto', '')).upper()
                 ref = ""
-                # Intentar buscar palabra clave
-                match_kw = re.search(r'\b(?:REF|REFERENCIA|CVE|RASTREO|AUT)\s*:?\s*([A-Z0-9]{6,20})\b', texto)
-                if match_kw:
-                    ref = match_kw.group(1)
-                else:
-                    # Intentar buscar secuencia numérica larga típica de referencia
-                    match_num = re.search(r'\b(\d{7,20})\b', texto)
-                    if match_num:
-                        ref = match_num.group(1)
+                match_num = re.search(r'\b(\d{7,20})\b', concepto)
+                if match_num:
+                    candidate = match_num.group(1)
+                    if candidate.upper() not in REF_TRUNCADAS_INVALIDAS:
+                        ref = candidate
                 referencias_limpias.append(ref)
                 
             df_export['Referencia_Bancaria_Limpia'] = referencias_limpias
