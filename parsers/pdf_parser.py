@@ -20,7 +20,7 @@ class BancoPDFParser:
             
         try:
             # Invocar al motor legado
-            resultado = process_single_pdf(tmp_path)
+            resultado = process_single_pdf(tmp_path, original_filename)
         except Exception as e:
             os.remove(tmp_path)
             return pd.DataFrame(columns=self.COLUMNAS_ESPERADAS), {

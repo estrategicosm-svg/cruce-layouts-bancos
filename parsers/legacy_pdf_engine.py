@@ -84,6 +84,8 @@ def detect_bank(text_sample, file_name=""):
         return "BAJIO"
     if "CITIBANAMEX" in text_upper or "BANAMEX" in text_upper or "BANCO NACIONAL DE MEXICO" in text_upper or "BANCO NACIONAL DE MÉXICO" in text_upper or "BANAMEX" in file_name_upper or "BMX" in file_name_upper:
         return "BANAMEX"
+    if "BBVA MEXICO" in text_upper or "BBVA MÉXICO" in text_upper or "GRUPO FINANCIERO BBVA" in text_upper or "BBVA" in file_name_upper:
+        return "BBVA"
     if "BANREGIO" in text_upper or "BANREGIO" in file_name_upper:
         return "BANREGIO"
     import re
@@ -630,6 +632,8 @@ def parse_ibc_statement(pages_words, file_name, method_used):
 def parse_bajio_statement(pages_words, file_name, method_used):
     transactions = []
     recap_data = {}
+    warnings_log = []
+    text_bruto = []
     
     cuenta = ""
     periodo = ""
@@ -640,88 +644,120 @@ def parse_bajio_statement(pages_words, file_name, method_used):
     closing_bal = 0.0
     
     columns = [
-        ("Fecha", 0, 70),
-        ("Concepto", 70, 250),
-        ("Cargo", 250, 320),
-        ("Abono", 320, 400),
-        ("Saldo", 400, 650)
+        ("Fecha", 0, 55),
+        ("Concepto", 55, 380),
+        ("Monto", 380, 500),
+        ("Saldo", 500, 650)
     ]
     
     current_tx = None
     
     for page_num_idx, page_lines in enumerate(pages_words):
         page_num = page_num_idx + 1
+        page_text_lines = []
+        for line in page_lines:
+            line_str = " ".join([w['text'] for w in line]).strip()
+            page_text_lines.append(line_str)
+        page_text = "\n".join(page_text_lines)
         
+        text_bruto.append({
+            'Archivo': file_name,
+            'Pagina': page_num,
+            'Metodo': method_used,
+            'Texto': page_text
+        })
+        
+        if "CUENTA" in page_text.upper() and "BANBAJIO" in page_text.upper() and not cuenta:
+            m_ct = re.search(r"CUENTA\s+(?:CONECTA\s+BANBAJIO)?\s*(\d{10,})", page_text, re.IGNORECASE)
+            if m_ct:
+                cuenta = m_ct.group(1)
+        
+        if "PERIODO:" in page_text.upper() and not periodo:
+            m_per = re.search(r"PERIODO:\s*(.*)", page_text, re.IGNORECASE)
+            if m_per:
+                periodo = m_per.group(1).strip()
+                
+        if "FECHA DE CORTE" in page_text.upper() and not fecha_corte:
+            m_fc = re.search(r"FECHA DE CORTE\s+(.*)", page_text, re.IGNORECASE)
+            if m_fc:
+                fecha_corte = m_fc.group(1).strip()
+                
+        m_recap = re.search(r"\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})", page_text)
+        if m_recap and "SALDO" not in m_recap.group(0).upper():
+            if beg_bal == 0.0 and closing_bal == 0.0:
+                beg_bal = clean_number(m_recap.group(1))
+                total_credits = clean_number(m_recap.group(2))
+                total_debits = clean_number(m_recap.group(3))
+                closing_bal = clean_number(m_recap.group(4))
+                    
+        if "RESUMEN DE COMISIONES" in page_text.upper() or "SALDO MINIMO" in page_text.upper():
+            if current_tx:
+                transactions.append(current_tx)
+                current_tx = None
+            continue
+                
         for line in page_lines:
             line_str = " ".join([w['text'] for w in line]).strip()
             line_str_upper = line_str.upper()
             
             if not line_str:
                 continue
-                
-            if "CUENTA" in line_str_upper and "BANBAJIO" in line_str_upper:
-                m_ct = re.search(r"CUENTA\s+(?:CONECTA\s+BANBAJIO)?\s*(\d+)", line_str_upper)
-                if m_ct and not cuenta:
-                    cuenta = m_ct.group(1)
             
-            if "PERIODO:" in line_str_upper:
-                m_per = re.search(r"PERIODO:\s*(.*)", line_str_upper)
-                if m_per and not periodo:
-                    periodo = m_per.group(1).strip()
-                    
-            if "FECHA DE CORTE" in line_str_upper:
-                m_fc = re.search(r"FECHA DE CORTE\s+(.*)", line_str_upper)
-                if m_fc and not fecha_corte:
-                    fecha_corte = m_fc.group(1).strip()
-                    
-            m_recap = re.search(r"\$\s*([\d,]+\.\d{2})\s*\$\s*([\d,]+\.\d{2})\s*\$\s*([\d,]+\.\d{2})\s*\$\s*([\d,]+\.\d{2})", line_str)
-            if m_recap and "SALDO" not in line_str_upper:
-                if beg_bal == 0.0 and closing_bal == 0.0:
-                    beg_bal = clean_number(m_recap.group(1))
-                    total_credits = clean_number(m_recap.group(2))
-                    total_debits = clean_number(m_recap.group(3))
-                    closing_bal = clean_number(m_recap.group(4))
-                    
-            if "RESUMEN DE COMISIONES" in line_str_upper or "SALDO MINIMO" in line_str_upper or "ESTE DOCUMENTO ES UNA REPRESENTACION" in line_str_upper or "TOTAL DE" in line_str_upper:
-                if current_tx:
-                    transactions.append(current_tx)
-                    current_tx = None
-                continue
-                
-            # Ignorar encabezados de página y tabla para no ensuciar transacciones (Y < 105)
             if line[0]['top'] < 105.0:
                 continue
                 
             row_text, row_words = partition_line(line, columns)
             fecha_col = row_text.get("Fecha", "").strip()
             
-            # Match formats like "5 ENE" or "05 ENE"
             m_fecha = re.match(r"^(\d{1,2}\s+[A-Za-z]{3})", fecha_col)
             
             if m_fecha:
                 if current_tx:
                     transactions.append(current_tx)
                     
-                cargo_str = row_text.get("Cargo", "")
-                abono_str = row_text.get("Abono", "")
-                saldo_str = row_text.get("Saldo", "")
+                monto_str = row_text.get("Monto", "").strip()
+                saldo_str = row_text.get("Saldo", "").strip()
+                concepto_str = row_text.get("Concepto", "").strip()
                 
-                cargo_val = clean_number(cargo_str)
-                abono_val = clean_number(abono_str)
+                monto_val = clean_number(monto_str)
                 saldo_val = clean_number(saldo_str)
                 
-                # Derive year from fecha_corte
                 year = "2024"
                 m_year = re.search(r"(\d{4})", fecha_corte)
                 if m_year: year = m_year.group(1)
                 elif m_year := re.search(r"(\d{4})", periodo): year = m_year.group(1)
                 
-                # Format to dd/mm/yyyy
                 parts = fecha_col.split()
                 day = int(parts[0])
                 meses = {"ENE":1, "FEB":2, "MAR":3, "ABR":4, "MAY":5, "JUN":6, "JUL":7, "AGO":8, "SEP":9, "OCT":10, "NOV":11, "DIC":12}
                 month = meses.get(parts[1].upper()[:3], 1)
                 fecha_clean = f"{day:02d}/{month:02d}/{year}"
+                
+                concepto_upper = concepto_str.upper()
+                is_deposito = any(kw in concepto_upper for kw in ["DEPOSITO", "DEPÓSITO", "DEP?SITO", "DEP?SITO", "DEPOSITOS", "NOMINA", "NÓMINA"])
+                is_retiro = any(kw in concepto_upper for kw in ["ENVIO", "ENVÍO", "ENV?O", "COMISION", "COMISIÓN", "IVA", "TRASPASO DE RECURSOS"])
+                
+                if monto_val is not None:
+                    if is_deposito and not is_retiro:
+                        abono_val = monto_val
+                        cargo_val = None
+                    elif is_retiro and not is_deposito:
+                        cargo_val = monto_val
+                        abono_val = None
+                    else:
+                        cargo_val = None
+                        abono_val = monto_val
+                else:
+                    cargo_val = None
+                    abono_val = None
+                
+                ref_str = ""
+                m_ref = re.search(r"(?:REF\.?|RASTREO:?)\s*([A-Za-z0-9\-]{6,})", line_str, re.IGNORECASE)
+                if m_ref:
+                    ref_str = m_ref.group(1)
+                m_ref2 = re.search(r"\b(\d{7,})\b", line_str)
+                if not ref_str and m_ref2:
+                    ref_str = m_ref2.group(1)
                 
                 current_tx = {
                     'banco': 'BAJIO',
@@ -729,31 +765,35 @@ def parse_bajio_statement(pages_words, file_name, method_used):
                     'pagina': page_num,
                     'metodo': method_used,
                     'fecha': fecha_clean,
-                    'concepto': row_text.get("Concepto", "").strip(),
+                    'concepto': concepto_str,
+                    'referencia': ref_str,
                     'cargo': cargo_val,
                     'abono': abono_val,
                     'saldo': saldo_val,
+                    'seccion_origen': '',
+                    'importe_detectado': monto_val,
+                    'importe_1': monto_val,
+                    'importe_2': saldo_val,
+                    'importe_3': None,
                     'original_fecha': fecha_col,
-                    'original_concepto': row_text.get("Concepto", "").strip(),
+                    'original_concepto': concepto_str,
+                    'original_cargo': monto_str if cargo_val else '',
+                    'original_abono': monto_str if abono_val else '',
+                    'original_saldo': saldo_str,
                     'confianza': 100.0,
                     'advertencias': [],
-                    'referencia': '',
-                    'es_movimiento_real': True,
-                    'es_evidencia': False
+                    'metadata': ''
                 }
             elif current_tx:
                 conc = row_text.get("Concepto", "").strip()
-                if conc:
+                if conc and len(conc) > 2:
                     current_tx['concepto'] += " " + conc
                     current_tx['original_concepto'] += " " + conc
-                    
-                # Si el amount estaba en la linea siguiente
-                cargo_str = row_text.get("Cargo", "")
-                abono_str = row_text.get("Abono", "")
-                if clean_number(abono_str) and current_tx['abono'] is None:
-                    current_tx['abono'] = clean_number(abono_str)
-                if clean_number(cargo_str) and current_tx['cargo'] is None:
-                    current_tx['cargo'] = clean_number(cargo_str)
+                
+                if not current_tx.get('referencia'):
+                    m_ref = re.search(r"(?:REF\.?|RASTREO:?)\s*([A-Za-z0-9\-]{6,})", line_str, re.IGNORECASE)
+                    if m_ref:
+                        current_tx['referencia'] = m_ref.group(1)
                     
     if current_tx:
         transactions.append(current_tx)
@@ -771,7 +811,14 @@ def parse_bajio_statement(pages_words, file_name, method_used):
         'closing_balance': closing_bal
     }
     
-    return transactions, "", [], recap_data
+    valid_transactions = []
+    for tx in transactions:
+        if tx['cargo'] is None and tx['abono'] is None:
+            tx['advertencias'].append("No se detectaron importes")
+            tx['confianza'] = min(tx['confianza'], 50.0)
+        valid_transactions.append(tx)
+    
+    return valid_transactions, text_bruto, warnings_log, recap_data
 
 def parse_banamex_statement(pages_words, file_name, method_used):
     transactions = []
@@ -1727,6 +1774,232 @@ def parse_monex_statement(pages_words, file_name, method_used):
     
     return txs, raw, warnings, recap
 
+def parse_bbva_statement(pages_words, file_name, method_used):
+    transactions = []
+    warnings_log = []
+    text_bruto = []
+    recap_data = None
+
+    columns = [
+        ("FechaOper", 0, 50),
+        ("FechaLiq", 50, 82),
+        ("Codigo", 82, 105),
+        ("Concepto", 105, 230),
+        ("Referencia", 230, 360),
+        ("Cargos", 360, 420),
+        ("Abonos", 420, 475),
+        ("SaldoOper", 475, 537),
+        ("SaldoLiq", 537, 610)
+    ]
+    current_tx = None
+    current_concepto_lines = []
+    REGEX_MONTO_DECIMAL = re.compile(r"[\d,]+\.\d{2}")
+
+    for page_idx, page_lines in enumerate(pages_words):
+        page_num = page_idx + 1
+        page_text_lines = []
+        for line in page_lines:
+            line_str = " ".join([w['text'] for w in line]).strip()
+            page_text_lines.append(line_str)
+        page_text = "\n".join(page_text_lines)
+
+        text_bruto.append({
+            'Archivo': file_name,
+            'Pagina': page_num,
+            'Metodo': method_used,
+            'Texto': page_text
+        })
+
+        if page_num == 1:
+            cuenta = ""
+            m_ct = re.search(r"No\.\s*(?:de\s+)?Cuenta\s+(\d+)", page_text, re.IGNORECASE)
+            if m_ct:
+                cuenta = m_ct.group(1)
+            m_clabe = re.search(r"CLABE\s+(\d+)", page_text, re.IGNORECASE)
+            if not cuenta and m_clabe:
+                cuenta = m_clabe.group(1)
+
+            periodo = ""
+            m_per = re.search(r"Periodo\s+DEL\s+(\d{2}/\d{2}/\d{4})\s+AL\s+(\d{2}/\d{2}/\d{4})", page_text, re.IGNORECASE)
+            if m_per:
+                periodo = f"{m_per.group(1)} AL {m_per.group(2)}"
+
+            beg_bal = 0.0
+            m_beg = re.search(r"Saldo de (?:Liquidaci[oó]n|Operaci[oó]n)\s+Inicial\s+([\d,]+\.\d{2})", page_text, re.IGNORECASE)
+            if m_beg:
+                beg_bal = clean_number(m_beg.group(1))
+
+            total_credits = 0.0
+            m_dep = re.search(r"Dep[oó]sitos\s*/\s*Abonos\s*\(\+\)\s*\d+\s*([\d,]+\.\d{2})", page_text, re.IGNORECASE)
+            if m_dep:
+                total_credits = clean_number(m_dep.group(1))
+
+            total_debits = 0.0
+            m_ret = re.search(r"Retiros\s*/\s*Cargos\s*\(\-\)\s*\d+\s*([\d,]+\.\d{2})", page_text, re.IGNORECASE)
+            if m_ret:
+                total_debits = clean_number(m_ret.group(1))
+
+            closing_bal = 0.0
+            m_end = re.search(r"Saldo Final\s*\(\+\)\s*([\d,]+\.\d{2})", page_text, re.IGNORECASE)
+            if m_end:
+                closing_bal = clean_number(m_end.group(1))
+
+            num_credits = len([1 for t in transactions if t.get('abono') is not None])
+            num_debits = len([1 for t in transactions if t.get('cargo') is not None])
+
+            recap_data = {
+                'banco': 'BBVA',
+                'cuenta': cuenta,
+                'periodo': periodo,
+                'beginning_balance': beg_bal,
+                'num_credits': num_credits,
+                'total_credits': total_credits,
+                'num_debits': num_debits,
+                'total_debits': total_debits,
+                'closing_balance': closing_bal
+            }
+
+        for line in page_lines:
+            line_str = " ".join([w['text'] for w in line]).strip()
+            line_str_upper = line_str.upper()
+
+            if not line_str:
+                continue
+            if "ESTADO DE CUENTA" in line_str_upper and len(line_str) < 20:
+                continue
+            if "PAGINA" in line_str_upper and "/" in line_str:
+                continue
+            if "NO. CUENTA" in line_str_upper or "NO. CLIENTE" in line_str_upper or "No. Cliente" in line_str:
+                continue
+            if "CASH MANAGEMENT" in line_str_upper:
+                continue
+            if "TOTAL DE MOVIMIENTOS" in line_str_upper or "TOTAL IMPORTE" in line_str_upper:
+                if current_tx:
+                    if current_concepto_lines:
+                        current_tx['concepto'] += " " + " ".join(current_concepto_lines)
+                        current_tx['original_concepto'] += " " + " ".join(current_concepto_lines)
+                        current_concepto_lines = []
+                    transactions.append(current_tx)
+                    current_tx = None
+                continue
+            if "BBVA MEXICO" in line_str_upper or "INSTITUCION DE BANCA" in line_str_upper:
+                continue
+            if "Av. Paseo de la Reforma" in line_str:
+                continue
+            if "Cuadro resumen" in line_str_upper or "Glosario" in line_str_upper:
+                continue
+            if "Estimado Cliente" in line_str or "Con gusto atenderemos" in line_str:
+                continue
+            if "Tiene 90" in line_str_upper or "Unidad Especializada" in line_str_upper:
+                continue
+
+            row_text, row_words = partition_line(line, columns)
+            fecha_op_str = row_text.get("FechaOper", "").strip()
+
+            m_fecha = re.match(r"^(\d{2}/[A-Z]{3})", fecha_op_str)
+            if m_fecha:
+                if current_tx:
+                    if current_concepto_lines:
+                        current_tx['concepto'] += " " + " ".join(current_concepto_lines)
+                        current_tx['original_concepto'] += " " + " ".join(current_concepto_lines)
+                        current_concepto_lines = []
+                    transactions.append(current_tx)
+
+                fecha_str = m_fecha.group(1)
+                meses_map = {"ENE":1,"FEB":2,"MAR":3,"ABR":4,"MAY":5,"JUN":6,"JUL":7,"AGO":8,"SEP":9,"OCT":10,"NOV":11,"DIC":12}
+                parts = fecha_str.split("/")
+                day = int(parts[0])
+                month = meses_map.get(parts[1].upper(), 1)
+                year = 2024
+                if m_per:
+                    year = int(m_per.group(1)[-4:])
+                fecha_clean = f"{day:02d}/{month:02d}/{year}"
+
+                concepto_str = row_text.get("Concepto", "").strip()
+                ref_str = row_text.get("Referencia", "").strip()
+                cargo_str = row_text.get("Cargos", "")
+                abono_str = row_text.get("Abonos", "")
+                saldo_op_str = row_text.get("SaldoOper", "")
+                saldo_liq_str = row_text.get("SaldoLiq", "")
+
+                cargo_val = clean_number(cargo_str)
+                abono_val = clean_number(abono_str)
+                saldo_val = clean_number(saldo_liq_str) or clean_number(saldo_op_str)
+
+                if not ref_str:
+                    ref_m = re.search(r"Ref\.\s*(\d+)", line_str)
+                    if ref_m:
+                        ref_str = ref_m.group(1)
+
+                current_tx = {
+                    'banco': 'BBVA',
+                    'archivo': file_name,
+                    'pagina': page_num,
+                    'metodo': method_used,
+                    'fecha': fecha_clean,
+                    'concepto': concepto_str,
+                    'referencia': ref_str,
+                    'cargo': cargo_val,
+                    'abono': abono_val,
+                    'saldo': saldo_val,
+                    'seccion_origen': '',
+                    'importe_detectado': cargo_val if cargo_val else abono_val,
+                    'importe_1': cargo_val or abono_val,
+                    'importe_2': None,
+                    'importe_3': None,
+                    'original_fecha': fecha_str,
+                    'original_concepto': concepto_str,
+                    'original_cargo': cargo_str,
+                    'original_abono': abono_str,
+                    'original_saldo': saldo_liq_str or saldo_op_str,
+                    'confianza': 100.0,
+                    'advertencias': [],
+                    'metadata': ''
+                }
+                current_concepto_lines = []
+                continue
+
+            if current_tx:
+                conc = row_text.get("Concepto", "").strip()
+                ref_part = row_text.get("Referencia", "").strip()
+                if conc:
+                    current_concepto_lines.append(conc)
+                if ref_part and not current_tx.get('referencia'):
+                    current_tx['referencia'] = ref_part
+
+                cargo_str = row_text.get("Cargos", "")
+                abono_str = row_text.get("Abonos", "")
+                if clean_number(cargo_str) and current_tx['cargo'] is None:
+                    current_tx['cargo'] = clean_number(cargo_str)
+                if clean_number(abono_str) and current_tx['abono'] is None:
+                    current_tx['abono'] = clean_number(abono_str)
+                continue
+
+    if current_tx:
+        if current_concepto_lines:
+            current_tx['concepto'] += " " + " ".join(current_concepto_lines)
+            current_tx['original_concepto'] += " " + " ".join(current_concepto_lines)
+        transactions.append(current_tx)
+
+    valid_transactions = []
+    for tx in transactions:
+        desc = tx['concepto']
+        ref = tx.get('referencia', '')
+        if not ref:
+            match_ref = re.search(r"(?:REF|REF\.|RASTREO:|RNU)\s*([A-Za-z0-9\-]+)", desc, re.IGNORECASE)
+            if match_ref:
+                ref = match_ref.group(1)
+        tx['referencia'] = ref
+
+        if tx['cargo'] is None and tx['abono'] is None:
+            tx['advertencias'].append("No se detectaron importes de cargo o abono")
+            tx['confianza'] = min(tx['confianza'], 50.0)
+        if tx['confianza'] < 85.0:
+            tx['advertencias'].append(f"Baja confianza: {tx['confianza']:.1f}%")
+        valid_transactions.append(tx)
+
+    return valid_transactions, text_bruto, warnings_log, recap_data
+
 def parse_desconocido_statement(pages_words, file_name, method_used):
     return parse_intercam_statement(pages_words, file_name, method_used)
 
@@ -1737,6 +2010,8 @@ def parse_transactions(pages_words, bank_name, file_name, method_used):
         res = parse_ibc_statement(pages_words, file_name, method_used)
     elif bank_name == "BANAMEX":
         res = parse_banamex_statement(pages_words, file_name, method_used)
+    elif bank_name == "BBVA":
+        res = parse_bbva_statement(pages_words, file_name, method_used)
     elif bank_name == "BANREGIO":
         res = parse_banregio_statement(pages_words, file_name, method_used)
     elif bank_name == "AMEX":
@@ -1756,9 +2031,9 @@ def parse_transactions(pages_words, bank_name, file_name, method_used):
             t['es_evidencia'] = False
     return txs, raw, warn, recap
 
-def process_single_pdf(pdf_path):
+def process_single_pdf(pdf_path, original_filename=None):
     """Procesa un PDF de forma completa e inteligente, detectando tipo y banco."""
-    file_name = os.path.basename(pdf_path)
+    file_name = original_filename if original_filename else os.path.basename(pdf_path)
     pdf_type = detect_pdf_type(pdf_path)
     
     text_sample = ""
