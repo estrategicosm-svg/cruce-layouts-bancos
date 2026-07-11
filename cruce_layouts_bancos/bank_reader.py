@@ -111,12 +111,22 @@ def _procesar_pdf(data: bytes, fname: str, info: dict) -> list[tuple]:
     return df_pdf, validacion
 
 
-def _procesar_excel(data: bytes, fname: str, info: dict) -> list[tuple]:
+def _procesar_excel(data: bytes, fname: str, info: dict) -> tuple[list, list[str]]:
     import pandas as pd
-    banco_parser = BancoParser()
+    bp = BancoParser()
     df = pd.read_excel(io.BytesIO(data))
-    movs = banco_parser.parsear_dataframe(df)
-    return movs
+    if df.empty:
+        return [], [f"'{fname}': archivo Excel vacio o sin datos"]
+    movs = bp.parsear_dataframe(df)
+    if not movs:
+        detail = "; ".join(bp.errores[:5]) if bp.errores else "columnas no reconocidas"
+        return [], [
+            f"'{fname}': {len(df)} filas leidas, 0 movimientos extraidos ({detail})",
+            f"  Columnas encontradas: {list(df.columns)}",
+        ]
+    if bp.errores:
+        return movs, [f"'{fname}': {len(bp.errores)} filas con error de {len(df)} totales: {'; '.join(bp.errores[:3])}"]
+    return movs, []
 
 
 def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> ResultadoLecturaBanco:
@@ -166,10 +176,15 @@ def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> Result
                             movimientos_raw.append((ruta_zip, fname, info, m))
                         resultado.archivos_pdf_ok += 1
                     else:
-                        movs = _procesar_excel(data, fname, info)
+                        movs, adv = _procesar_excel(data, fname, info)
                         for m in movs:
                             movimientos_raw.append((ruta_zip, fname, info, m))
-                        resultado.archivos_xlsx_ok += 1
+                        if movs:
+                            resultado.archivos_xlsx_ok += 1
+                        else:
+                            resultado.archivos_xlsx_fallidos += 1
+                        for a in adv:
+                            resultado.advertencias.append(a)
                 except Exception as exc:
                     resultado.archivos_pdf_fallidos += 1 if ext == ".pdf" else 0
                     resultado.errores.append(ErrorArchivo(

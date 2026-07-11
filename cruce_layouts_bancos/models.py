@@ -124,6 +124,7 @@ class ResultadoLecturaBanco:
     movimientos: list[MovimientoBanco] = field(default_factory=list)
     archivos_totales: int = 0
     archivos_xlsx_ok: int = 0
+    archivos_xlsx_fallidos: int = 0
     archivos_pdf_total: int = 0
     archivos_pdf_ok: int = 0
     archivos_pdf_fallidos: int = 0

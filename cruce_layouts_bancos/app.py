@@ -102,6 +102,7 @@ def ejecutar_cruce(
         "movimientos": movimientos,
         "ARCHIVOS_TOTALES_ZIP": lectura.archivos_totales,
         "ARCHIVOS_XLSX_OK": lectura.archivos_xlsx_ok,
+        "ARCHIVOS_XLSX_FALLIDOS": lectura.archivos_xlsx_fallidos,
         "ARCHIVOS_PDF_TOTAL": lectura.archivos_pdf_total,
         "ARCHIVOS_PDF_OK": lectura.archivos_pdf_ok,
         "ARCHIVOS_PDF_FALLIDOS": lectura.archivos_pdf_fallidos,

@@ -177,6 +177,7 @@ with st.expander("Archivos procesados del ZIP", expanded=False):
     |---------|----------|
     | Archivos totales | {result['ARCHIVOS_TOTALES_ZIP']} |
     | Excel procesados OK | {result['ARCHIVOS_XLSX_OK']} |
+    | Excel fallidos | {result['ARCHIVOS_XLSX_FALLIDOS']} |
     | PDFs en ZIP | {result['ARCHIVOS_PDF_TOTAL']} |
     | PDFs procesados OK | {result['ARCHIVOS_PDF_OK']} |
     | PDFs fallidos | {result['ARCHIVOS_PDF_FALLIDOS']} |
