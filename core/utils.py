@@ -38,11 +38,27 @@ def to_decimal(valor: Any, default: str = "0") -> Decimal:
         return Decimal(default)
 
 
+_DATE_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d",
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y",
+    "%d-%m-%Y %H:%M:%S",
+    "%d-%m-%Y",
+)
+
+
 def to_datetime(valor: Any) -> datetime:
     if isinstance(valor, datetime):
         return valor
     if valor is None or pd.isna(valor):
         return datetime.min
+    s = str(valor).strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
     fecha = pd.to_datetime(valor, errors="coerce", dayfirst=True)
     if pd.isna(fecha):
         return datetime.min

@@ -377,3 +377,31 @@ def test_zip_vacio_retorna_fallo():
     assert resultado.total == 0
     assert resultado.fallos_count == 1
     assert resultado.fallos[0]["archivo"] == "(ZIP)"
+
+
+# --- Tests: Date parsing ---
+
+def test_iso_date_2024_02_01_parses_correctly():
+    from core.utils import to_datetime
+    result = to_datetime("2024-02-01")
+    assert result.year == 2024
+    assert result.month == 2
+    assert result.day == 1
+
+
+def test_dd_mm_yyyy_parses_correctly():
+    from core.utils import to_datetime
+    result = to_datetime("01/02/2024")
+    assert result.year == 2024
+    assert result.month == 2
+    assert result.day == 1
+
+
+def test_iso_datetime_parses_correctly():
+    from core.utils import to_datetime
+    result = to_datetime("2024-02-01 14:30:00")
+    assert result.year == 2024
+    assert result.month == 2
+    assert result.day == 1
+    assert result.hour == 14
+    assert result.minute == 30
