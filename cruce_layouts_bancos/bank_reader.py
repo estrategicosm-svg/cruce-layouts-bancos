@@ -23,9 +23,6 @@ from cruce_layouts_bancos.models import (
 
 TESSERACT_DISPONIBLE = shutil.which("tesseract") is not None
 
-if TESSERACT_DISPONIBLE:
-    from parsers.pdf_parser import BancoPDFParser
-
 from parsers.banco_parser import BancoParser
 
 
@@ -94,12 +91,14 @@ def _clasificar_tipo_movimiento(cargo: Decimal, abono: Decimal, concepto: str) -
     return ""
 
 
-def _procesar_pdf(data: bytes, fname: str, info: dict) -> list[tuple]:
+def _procesar_pdf(data: bytes, fname: str, info: dict) -> tuple:
     if not TESSERACT_DISPONIBLE:
         raise RuntimeError(
             f"No fue posible procesar '{fname}' porque falta Tesseract OCR en el servidor. "
             "Instala tesseract-ocr o usa archivos Excel."
         )
+    from parsers.pdf_parser import BancoPDFParser
+
     parser = BancoPDFParser()
     df_pdf, validacion = parser.parsear_pdf(data, fname)
     if df_pdf is None or df_pdf.empty:
