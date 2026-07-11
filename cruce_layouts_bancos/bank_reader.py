@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cruce_layouts_bancos.models import MovimientoBanco, normalizar_empresa, normalizar_banco
 from parsers.banco_parser import BancoParser
-from parsers.pdf_parser import BancoPDFParser
 
 
 def _extraer_info(nombre: str) -> dict:
@@ -110,6 +109,7 @@ def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> list[M
 
                 try:
                     if ext == ".pdf":
+                        from parsers.pdf_parser import BancoPDFParser
                         df_pdf, _ = BancoPDFParser().parsear_pdf(data, fname)
                         if df_pdf is not None and not df_pdf.empty:
                             movs = banco_parser.parsear_dataframe(df_pdf)
