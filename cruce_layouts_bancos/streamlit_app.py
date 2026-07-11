@@ -4,15 +4,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+_HERE = Path(__file__).resolve().parent
+_REPO = _HERE.parent
+
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
 
 import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
 
-from cruce_layouts_bancos.app import ejecutar_cruce
+from app import ejecutar_cruce
 
 st.set_page_config(
     page_title="Conciliador Layouts vs Bancos",
