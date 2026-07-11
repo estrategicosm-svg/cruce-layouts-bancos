@@ -11,3 +11,5 @@ agent3_conflicts_before_recovery.txt
 agent3_index_diff_before_recovery.txt
 agent3_unmerged_index.txt
 agent3_worktree_diff_before_recovery.txt
+templates/
+scripts/audit_*.py
