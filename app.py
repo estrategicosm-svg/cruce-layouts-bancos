@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -13,6 +15,25 @@ from parsers.banco_parser import BancoParser
 from parsers.cedula_ingresos_parser import CedulaIngresosParser
 from parsers.cedula_parser import CedulaParser
 from parsers.xml_parser import XMLParser
+
+ASSETS_DIR = Path(__file__).parent / "assets" / "plantillas"
+
+LAYOUT_HASHES = {
+    "LAYOUT_CEDULA_INGRESOS.xlsx": "832C2628B8F2EDF969425A06877399AEE08BA3F7380BC40B0ACDBA9126A553F0",
+    "LAYOUT_CARGA_EGRESOS.xlsx": "7CFAC1C9FBB55326751723E475513C24A8D909E7252BB1CD72B0CAFFAB50BA5B",
+}
+
+
+def _verificar_layout(nombre: str) -> bool:
+    """Verificar SHA-256 de un archivo de layout antes de servirlo."""
+    filepath = ASSETS_DIR / nombre
+    if not filepath.exists():
+        return False
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest().upper() == LAYOUT_HASHES[nombre]
 
 
 st.set_page_config(
@@ -75,6 +96,27 @@ class SATConciliatorApp:
 
             st.divider()
             st.subheader("Archivos")
+
+            st.markdown("**Descargables oficiales**")
+            for nombre in ["LAYOUT_CEDULA_INGRESOS.xlsx", "LAYOUT_CARGA_EGRESOS.xlsx"]:
+                label = "Descargar layout de Ingresos" if "INGRESOS" in nombre else "Descargar layout de Egresos"
+                filepath = ASSETS_DIR / nombre
+                if _verificar_layout(nombre):
+                    with open(filepath, "rb") as f:
+                        data = f.read()
+                    st.download_button(
+                        label=label,
+                        data=data,
+                        file_name=nombre,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key=f"dl_{nombre}",
+                    )
+                else:
+                    st.error(f"Archivo {nombre} no verificado (SHA-256 no coincide). Descarga bloqueada.")
+
+            st.divider()
+
             cedula_file = st.file_uploader("Cedula de Egresos (IVA Acreditable)", type=["xlsx", "xls"])
             ingresos_file = st.file_uploader("Cedula de Ingresos (opcional)", type=["xlsx", "xls"])
             banco_file = st.file_uploader("Estado de cuenta Excel/PDF", type=["xlsx", "xls", "pdf"])
