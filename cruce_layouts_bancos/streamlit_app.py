@@ -1,0 +1,292 @@
+"""Dashboard Streamlit para cruce de layouts vs estados de cuenta bancarios."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import pandas as pd
+import streamlit as st
+from openpyxl import load_workbook
+
+from cruce_layouts_bancos.app import ejecutar_cruce
+
+st.set_page_config(
+    page_title="Conciliador Layouts vs Bancos",
+    page_icon="",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<style>
+    .stMetric > div { padding: 12px 16px; border-radius: 8px; }
+    div[data-testid="stMetricValue"] { font-size: 1.6rem !important; }
+    div[data-testid="stMetricDelta"] { font-size: 0.85rem !important; }
+    .block-container { padding-top: 1.5rem; }
+    section[data-testid="stSidebar"] > div { padding-top: 1rem; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ── Sidebar ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## Configuracion")
+
+    st.markdown("### Archivos de entrada")
+    f_egresos = st.file_uploader(
+        "Layout Egresos (.xlsx)", type=["xlsx"],
+        help="Layout de carga de egresos del sistema contable",
+    )
+    f_ingresos = st.file_uploader(
+        "Layout Ingresos (.xlsx)", type=["xlsx"],
+        help="Layout de cedula de ingresos del sistema contable",
+    )
+    f_bancos = st.file_uploader(
+        "ZIP Estados de cuenta", type=["zip"],
+        help="ZIP con PDFs y/o Excel de estados de cuenta bancarios",
+    )
+
+    st.markdown("---")
+    st.markdown("### Tolerancia de cruce")
+    col_t1, col_t2 = st.columns(2)
+    tol_mxn = col_t1.number_input(
+        "MXN ($)", min_value=0.0, max_value=10000.0, value=1.0, step=0.5,
+        help="Tolerancia maxima en pesos para aceptar un cruce",
+    )
+    tol_usd = col_t2.number_input(
+        "USD ($)", min_value=0.0, max_value=1000.0, value=0.01, step=0.01,
+        help="Tolerancia maxima en dolares para aceptar un cruce",
+    )
+
+    st.markdown("---")
+    st.markdown("### Descargas")
+    assets = Path(__file__).parent / "assets"
+    for fname, label in [
+        ("LAYOUT_CARGA_EGRESOS_OUTPUT.xlsx", "Template Egresos"),
+        ("LAYOUT_CEDULA_INGRESOS_OUTPUT.xlsx", "Template Ingresos"),
+    ]:
+        p = assets / fname
+        if p.exists():
+            st.download_button(
+                label=label,
+                data=p.read_bytes(),
+                file_name=fname,
+                type="secondary",
+                use_container_width=True,
+            )
+
+    st.markdown("---")
+    ejecutar = st.button(
+        "Ejecutar cruce",
+        type="primary",
+        use_container_width=True,
+        disabled=not (f_egresos and f_ingresos and f_bancos),
+    )
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+st.markdown("## Conciliador Layouts vs Bancos")
+
+if not ejecutar:
+    st.info(
+        "Sube los 3 archivos en la barra lateral y presiona **Ejecutar cruce**."
+    )
+    st.stop()
+
+with st.spinner("Procesando..."):
+    result = ejecutar_cruce(
+        egresos_bytes=f_egresos.getvalue(),
+        nombre_egresos=f_egresos.name,
+        ingresos_bytes=f_ingresos.getvalue(),
+        nombre_ingresos=f_ingresos.name,
+        zip_bancos_bytes=f_bancos.getvalue(),
+        nombre_zip=f_bancos.name,
+        tolerancia_mxn=tol_mxn,
+        tolerancia_usd=tol_usd,
+    )
+
+# ── KPIs ─────────────────────────────────────────────────────────────────────
+c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1.metric("Cruces", result["CRUCES_ENCONTRADOS_TOTAL"])
+c2.metric("Multiples", result["MULTIPLES_CANDIDATOS_TOTAL"])
+c3.metric("Sin candidato", result["SIN_CANDIDATO_TOTAL"])
+c4.metric("Movimientos", result["MOVIMIENTOS_BANCARIOS"])
+c5.metric("TDC excluidas", result["MOVIMIENTOS_TDC"])
+c6.metric("Tiempo", f"{result['TIEMPO']:.1f}s")
+
+st.markdown("---")
+
+# ── Tabs ─────────────────────────────────────────────────────────────────────
+tab_res, tab_eg, tab_ing, tab_mov, tab_arch = st.tabs([
+    "Resumen", "Egresos", "Ingresos", "Movimientos", "Archivo",
+])
+
+# ── Resumen ──────────────────────────────────────────────────────────────────
+with tab_res:
+    st.markdown("### Cuadre por grupos")
+
+    def _status_bar(label, ok, total):
+        pct = ok / total * 100 if total > 0 else 0
+        return f"{label}: **{ok}** / {total} ({pct:.0f}%)"
+
+    r = result
+    st.markdown(f"""
+    | Modulo | Encontrados | Multiples | Sin candidato | Mezclados | Total |
+    |--------|------------|-----------|---------------|-----------|-------|
+    | **Egresos** | {r['CRUCES_ENCONTRADOS_EGRESOS']} | {r['MULTIPLES_CANDIDATOS_EGRESOS']} | {r['SIN_CANDIDATO_EGRESOS']} | — | {r['GRUPOS_EGRESOS']} |
+    | **Ingresos** | {r['CRUCES_ENCONTRADOS_INGRESOS']} | {r['MULTIPLES_CANDIDATOS_INGRESOS']} | {r['SIN_CANDIDATO_INGRESOS']} | — | {r['GRUPOS_INGRESOS']} |
+    | **Total** | **{r['CRUCES_ENCONTRADOS_TOTAL']}** | **{r['MULTIPLES_CANDIDATOS_TOTAL']}** | **{r['SIN_CANDIDATO_TOTAL']}** | {r['MONEDAS_MIXTAS']} | **{r['GRUPOS_EGRESOS'] + r['GRUPOS_INGRESOS']}** |
+    """)
+
+    st.markdown("### Movimientos bancarios")
+    st.markdown(f"""
+    | Tipo | Cantidad |
+    |------|----------|
+    | Cargos (egresos) | {r['MOVIMIENTOS_CARGOS']} |
+    | Abonos (ingresos) | {r['MOVIMIENTOS_ABONOS']} |
+    | TDC (excluidas) | {r['MOVIMIENTOS_TDC']} |
+    | **Total** | **{r['MOVIMIENTOS_BANCARIOS']}** |
+    """)
+
+    st.markdown("### Cruces asignados")
+    cm = r["cruce_map"]
+    if cm:
+        df_cruces = pd.DataFrame([
+            {"Grupo": k, "Cruce": v} for k, v in sorted(cm.items())
+        ])
+        st.dataframe(df_cruces, use_container_width=True, height=300)
+
+# ── Egresos ──────────────────────────────────────────────────────────────────
+with tab_eg:
+    st.markdown("### Layout de egresos con CRUCE BANCARIO")
+    try:
+        wb = load_workbook(result["ARCHIVO"], read_only=True)
+        ws = wb["DATOS"]
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        headers = [str(h or f"col_{i}") for i, h in enumerate(rows[0])]
+        data = rows[1:]
+        df_eg = pd.DataFrame(data, columns=headers)
+        wb.close()
+
+        if "CRUCE BANCARIO" in df_eg.columns:
+            matched = df_eg["CRUCE BANCARIO"].notna().sum()
+            st.caption(f"{matched} de {len(df_eg)} filas con cruce asignado")
+            highlight = df_eg[df_eg["CRUCE BANCARIO"].notna()]
+            if not highlight.empty:
+                st.dataframe(highlight, use_container_width=True, height=400)
+        else:
+            st.dataframe(df_eg, use_container_width=True, height=400)
+    except Exception as e:
+        st.error(f"Error leyendo egresos: {e}")
+
+# ── Ingresos ─────────────────────────────────────────────────────────────────
+with tab_ing:
+    st.markdown("### Layout de ingresos con CRUCE BANCARIO")
+    try:
+        wb = load_workbook(result["ARCHIVO"], read_only=True)
+        ws = wb["INGRESOS"]
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        headers = [str(h or f"col_{i}") for i, h in enumerate(rows[0])]
+        data = rows[1:]
+        df_ing = pd.DataFrame(data, columns=headers)
+        wb.close()
+
+        if "CRUCE BANCARIO" in df_ing.columns:
+            matched = df_ing["CRUCE BANCARIO"].notna().sum()
+            st.caption(f"{matched} de {len(df_ing)} filas con cruce asignado")
+            highlight = df_ing[df_ing["CRUCE BANCARIO"].notna()]
+            if not highlight.empty:
+                st.dataframe(highlight, use_container_width=True, height=400)
+        else:
+            st.dataframe(df_ing, use_container_width=True, height=400)
+    except Exception as e:
+        st.error(f"Error leyendo ingresos: {e}")
+
+# ── Movimientos ──────────────────────────────────────────────────────────────
+with tab_mov:
+    st.markdown("### Movimientos bancarios")
+    try:
+        wb = load_workbook(result["ARCHIVO"], read_only=True)
+        ws = wb["MOVIMIENTOS_BANCARIOS"]
+
+        summary_start = None
+        for row in range(1, ws.max_row + 1):
+            v = ws.cell(row, 1).value
+            if v and "RESUMEN" in str(v).upper():
+                summary_start = row
+                break
+
+        if summary_start:
+            st.caption(f"Datos: filas 2-{summary_start - 2} | Resumen: filas {summary_start}-{ws.max_row}")
+
+            data_rows = []
+            for row in range(2, summary_start):
+                vals = [ws.cell(row, c).value for c in range(1, ws.max_column + 1)]
+                if any(v is not None for v in vals):
+                    data_rows.append(vals)
+
+            headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+            df_mov = pd.DataFrame(data_rows, columns=headers)
+
+            cruce_cargo = df_mov["CRUCE BANCARIO"].notna().sum() if "CRUCE BANCARIO" in df_mov.columns else 0
+            poliza_col = "POLIZA" if "POLIZA" in df_mov.columns else None
+            poliza_filled = df_mov[poliza_col].notna().sum() if poliza_col else 0
+            st.caption(f"CRUCE BANCARIO (cargo): {cruce_cargo} | POLIZA asignada: {poliza_filled}")
+
+            show_cols = [c for c in ["empresa_detectada", "banco_detectada", "cuenta_detectada",
+                                      "moneda_detectada", "fecha_movimiento", "descripcion_original",
+                                      "cargo", "CRUCE BANCARIO", "abono", "POLIZA"]
+                         if c in df_mov.columns]
+            st.dataframe(df_mov[show_cols], use_container_width=True, height=400)
+
+            st.markdown("---")
+            st.markdown("#### Resumen por banco/cuenta/moneda")
+            summary_rows = []
+            for row in range(summary_start + 2, ws.max_row + 1):
+                vals = [ws.cell(row, c).value for c in range(1, 9)]
+                if any(v is not None for v in vals):
+                    summary_rows.append(vals)
+
+            if summary_rows:
+                sum_headers = ["Archivo", "Empresa", "Moneda", "Total Cargos",
+                               "Total Abonos", "Neto", "Movimientos", "Validacion"]
+                df_sum = pd.DataFrame(summary_rows, columns=sum_headers)
+                cuadra = df_sum[df_sum["Validacion"] == "CUADRA"]
+                no_cuadra = df_sum[df_sum["Validacion"] != "CUADRA"]
+                st.caption(f"Cuadran: {len(cuadra)} | No cuadran: {len(no_cuadra)}")
+                st.dataframe(df_sum, use_container_width=True, height=350)
+
+                if not no_cuadra.empty:
+                    st.warning(f"{len(no_cuadra)} cuentas no cuadran. Revisa los montos.")
+                    st.dataframe(no_cuadra, use_container_width=True)
+        else:
+            st.warning("No se encontro seccion de resumen en el archivo.")
+
+        wb.close()
+    except Exception as e:
+        st.error(f"Error leyendo movimientos: {e}")
+
+# ── Archivo ──────────────────────────────────────────────────────────────────
+with tab_arch:
+    st.markdown("### Descargar resultado")
+    archivo = Path(result["ARCHIVO"])
+    if archivo.exists():
+        st.download_button(
+            label="Descargar Excel de cruce",
+            data=archivo.read_bytes(),
+            file_name=archivo.name,
+            type="primary",
+            use_container_width=True,
+        )
+        st.markdown(f"""
+        | Propiedad | Valor |
+        |-----------|-------|
+        | Archivo | `{result['ARCHIVO']}` |
+        | Tamano | {result['TAMAÑO']:,} bytes |
+        | Hojas | {', '.join(result['HOJAS'])} |
+        | SHA256 | `{result['SHA256'][:32]}...` |
+        | Tolerancia MXN | ${result['tolerancia_mxn']:.2f} |
+        | Tolerancia USD | ${result['tolerancia_usd']:.2f} |
+        """)

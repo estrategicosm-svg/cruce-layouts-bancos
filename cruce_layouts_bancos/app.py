@@ -24,8 +24,12 @@ def ejecutar_cruce(
     zip_bancos_bytes: bytes,
     nombre_zip: str,
     archivo_salida: str = "outputs/CRUCE_LAYOUTS_VS_BANCOS_FEB24.xlsx",
+    tolerancia_mxn: float = 1.0,
+    tolerancia_usd: float = 0.01,
 ) -> dict:
     t0 = time.time()
+    tol_mxn = Decimal(str(tolerancia_mxn))
+    tol_usd = Decimal(str(tolerancia_usd))
 
     filas_eg = leer_layout(io.BytesIO(egresos_bytes), nombre_egresos, hint="EGRESOS")
     filas_ing = leer_layout(io.BytesIO(ingresos_bytes), nombre_ingresos, hint="INGRESOS")
@@ -38,8 +42,10 @@ def ejecutar_cruce(
     grupos_eg = agrupar_por_poliza(filas_eg)
     grupos_ing = agrupar_por_poliza(filas_ing)
 
-    res_eg = cruzar_grupos(grupos_eg, mov_cargos, usar_cargo=True)
-    res_ing = cruzar_grupos(grupos_ing, mov_abonos, usar_cargo=False)
+    res_eg = cruzar_grupos(grupos_eg, mov_cargos, usar_cargo=True,
+                           tolerancia_mxn=tol_mxn, tolerancia_usd=tol_usd)
+    res_ing = cruzar_grupos(grupos_ing, mov_abonos, usar_cargo=False,
+                            tolerancia_mxn=tol_mxn, tolerancia_usd=tol_usd)
 
     cruce_map = asignar_cruces(res_eg, res_ing)
 
@@ -85,6 +91,8 @@ def ejecutar_cruce(
         "SHA256": info["sha256"],
         "HOJAS": info["hojas"],
         "TIEMPO": time.time() - t0,
+        "tolerancia_mxn": tolerancia_mxn,
+        "tolerancia_usd": tolerancia_usd,
         "grupos_eg": grupos_eg,
         "grupos_ing": grupos_ing,
         "resultados_eg": res_eg,

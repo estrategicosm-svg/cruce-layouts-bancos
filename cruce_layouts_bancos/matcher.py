@@ -25,8 +25,11 @@ def buscar_candidatos(
     grupo: GrupoPoliza,
     movimientos: list[MovimientoBanco],
     usar_cargo: bool,
+    tolerancia_mxn: Decimal = Decimal("1.00"),
+    tolerancia_usd: Decimal = Decimal("0.01"),
 ) -> list[MovimientoBanco]:
     candidatos: list[MovimientoBanco] = []
+    tol = tolerancia_mxn if grupo.moneda_dominante.upper() == "MXN" else tolerancia_usd
     for m in movimientos:
         if m.es_tdc:
             continue
@@ -40,7 +43,7 @@ def buscar_candidatos(
             continue
         monto_m = m.cargo if usar_cargo else m.abono
         dif = abs(monto_m - grupo.total_grupo)
-        if dif <= Decimal("1.00"):
+        if dif <= tol:
             candidatos.append(m)
     return candidatos
 
@@ -49,6 +52,8 @@ def cruzar_grupos(
     grupos: dict[str, GrupoPoliza],
     movimientos: list[MovimientoBanco],
     usar_cargo: bool,
+    tolerancia_mxn: Decimal = Decimal("1.00"),
+    tolerancia_usd: Decimal = Decimal("0.01"),
 ) -> list[ResultadoCruce]:
     resultados: list[ResultadoCruce] = []
     movs_usados: set[int] = set()
@@ -63,7 +68,9 @@ def cruzar_grupos(
             ))
             continue
 
-        candidatos = buscar_candidatos(grupo, movimientos, usar_cargo)
+        candidatos = buscar_candidatos(grupo, movimientos, usar_cargo,
+                                        tolerancia_mxn=tolerancia_mxn,
+                                        tolerancia_usd=tolerancia_usd)
         disponibles = [m for m in candidatos if id(m) not in movs_usados]
 
         if not disponibles:
