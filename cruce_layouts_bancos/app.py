@@ -36,8 +36,8 @@ def ejecutar_cruce(
     lectura = leer_zip_bancos(zip_bancos_bytes, nombre_zip)
     movimientos = lectura.movimientos
 
-    mov_cargos = [m for m in movimientos if m.cargo > Decimal("0") and not m.es_tdc]
-    mov_abonos = [m for m in movimientos if m.abono > Decimal("0") and not m.es_tdc]
+    mov_cargos = [m for m in movimientos if m.cargo > Decimal("0")]
+    mov_abonos = [m for m in movimientos if m.abono > Decimal("0")]
     mov_tdc = [m for m in movimientos if m.es_tdc]
 
     grupos_eg = agrupar_por_poliza(filas_eg)

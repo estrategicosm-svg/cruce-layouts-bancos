@@ -104,7 +104,7 @@ def main():
             help="Tolerancia maxima en pesos para aceptar un cruce",
         )
         tol_usd = col_t2.number_input(
-            "USD ($)", min_value=0.0, max_value=1000.0, value=0.01, step=0.01,
+            "USD ($)", min_value=0.0, max_value=1000.0, value=0.10, step=0.01,
             help="Tolerancia maxima en dolares para aceptar un cruce",
         )
 
@@ -197,7 +197,7 @@ def main():
             "hojas": result.get("EXCEL_HOJAS", []),
             "fecha_generacion": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             "tolerancia_mxn": result.get("tolerancia_mxn", 1.0),
-            "tolerancia_usd": result.get("tolerancia_usd", 0.01),
+            "tolerancia_usd": result.get("tolerancia_usd", 0.10),
         }
 
     if not st.session_state.get("excel_resultado"):
@@ -245,7 +245,7 @@ def main():
     c2.metric("Multiples", result.get("MULTIPLES_CANDIDATOS_TOTAL", 0))
     c3.metric("Sin candidato", result.get("SIN_CANDIDATO_TOTAL", 0))
     c4.metric("Movimientos", result.get("MOVIMIENTOS_BANCARIOS", 0))
-    c5.metric("TDC excluidas", result.get("MOVIMIENTOS_TDC", 0))
+    c5.metric("TDC procesadas", result.get("MOVIMIENTOS_TDC", 0))
     c6.metric("Tiempo", f"{result.get('TIEMPO', 0):.1f}s")
 
     # ── Resumen archivos ZIP ─────────────────────────────────────────────────
@@ -287,7 +287,7 @@ def main():
         |------|----------|
         | Cargos (egresos) | {r.get('MOVIMIENTOS_CARGOS', 0)} |
         | Abonos (ingresos) | {r.get('MOVIMIENTOS_ABONOS', 0)} |
-        | TDC (excluidas) | {r.get('MOVIMIENTOS_TDC', 0)} |
+        | TDC (procesadas) | {r.get('MOVIMIENTOS_TDC', 0)} |
         | **Total** | **{r.get('MOVIMIENTOS_BANCARIOS', 0)}** |
         """)
 
