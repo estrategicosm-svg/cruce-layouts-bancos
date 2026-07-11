@@ -175,6 +175,7 @@ def _load_movimientos():
                                     referencia=ref,
                                 )
                                 m._fila_origen = idx + 2
+                                m._archivo_origen = name
                                 movimientos.append(m)
                             except Exception:
                                 continue

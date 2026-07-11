@@ -10,7 +10,8 @@ Solo monto -> BAJA / PROPUESTA_REVISAR.
 Cada fila del layout = 1 fila en la tabla intermedia.
 GRUPO_ID vincula registros de la misma POLIZA.
 
-Cada movimiento bancario se identifica univocamente con MOVIMIENTO_ID.
+Cada movimiento bancario se identifica univocamente con MOVIMIENTO_ID (tecnico)
+y con CRUCE_ID (operativo visible: EMPRESA-TIPO-BANCO-CONSECUTIVO).
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ import re
 
 import hashlib
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -39,6 +41,47 @@ from core.utils import normalizar_uuid
 logger = logging.getLogger(__name__)
 
 
+EMPRESA_CODES = {
+    "CSC": "CSC",
+    "INTRA": "INTRA",
+    "ICOLD": "ICOLD",
+    "TRANSCRUCES": "TRANS",
+}
+
+BANCO_CODES = {
+    "BANAMEX": "BNMX",
+    "BBVA": "BBVA",
+    "BAJIO": "BAJIO",
+    "BANCO DEL BAJÍO": "BAJIO",
+    "BANREGIO": "BREG",
+    "IBC": "IBC",
+    "MONEX": "MONEX",
+    "AMEX": "AMEX",
+    "AMERICAN EXPRESS": "AMEX",
+}
+
+
+def _extraer_empresa(archivo_banco: str) -> str:
+    """Extract empresa code from file path like 'CSC/CSC_BAJIO_...'"""
+    parts = archivo_banco.replace("\\", "/").split("/")
+    if parts:
+        first = parts[0].upper()
+        return EMPRESA_CODES.get(first, first)
+    return "DESC"
+
+
+def _mapear_banco_code(banco: str) -> str:
+    """Map banco name to short code for CRUCE_ID."""
+    return BANCO_CODES.get(banco.upper().strip(), banco.upper()[:4])
+
+
+def _naturaleza_tipo_cruce(naturaleza: str) -> str:
+    """Map naturaleza to CRUCE_ID tipo code: EGR or ING."""
+    if naturaleza == "ABONO":
+        return "ING"
+    return "EGR"
+
+
 @dataclass
 class EngineConfig:
     tolerancia_monto: Decimal = Decimal("1.00")
@@ -57,6 +100,7 @@ class BankMovementRecord:
     MOVIMIENTO_ID: str
     ARCHIVO_BANCO: str
     FILA_BANCO: int
+    EMPRESA: str
     BANCO: str
     CUENTA: str
     MONEDA: str
@@ -68,6 +112,7 @@ class BankMovementRecord:
     REFERENCIA_CLASIFICACION: str
     FECHA_VALIDA: bool
     NATURALEZA: str
+    CRUCE_ID: str = ""
 
 
 @dataclass
@@ -304,6 +349,7 @@ def _crear_fila(**kw) -> TablaIntermediateRow:
 def _crear_filas_para_grupo(
     grupo_id, registros, resultado_busqueda, total_grupo,
     config, archivo_banco, naturaleza, movimientos_asignados: set,
+    cruce_id_map: dict[str, str],
 ) -> list[TablaIntermediateRow]:
     filas = []
     poliza = getattr(registros[0], "poliza", "") or ""
@@ -320,6 +366,8 @@ def _crear_filas_para_grupo(
     if mov:
         candidato_hash = _movimiento_id_hash(mov, archivo_banco)
 
+    cand_cruce = cruce_id_map.get(candidato_hash, "") if candidato_hash else ""
+
     if resultado_busqueda.metodo == "AMBIGUO_MONTOS":
         for r in registros:
             fecha_ref = getattr(r, fecha_attr, None)
@@ -328,6 +376,7 @@ def _crear_filas_para_grupo(
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
                 TOTAL_GRUPO=total_grupo,
+                CRUCE_ID="", CANDIDATO_CRUCE_ID="",
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
                 FILA_BANCO=0, FECHA_BANCO="",
@@ -347,6 +396,7 @@ def _crear_filas_para_grupo(
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
                 TOTAL_GRUPO=total_grupo,
+                CRUCE_ID="", CANDIDATO_CRUCE_ID="",
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
                 FILA_BANCO=0, FECHA_BANCO="",
@@ -376,6 +426,7 @@ def _crear_filas_para_grupo(
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
                 TOTAL_GRUPO=total_grupo,
+                CRUCE_ID="", CANDIDATO_CRUCE_ID="",
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
                 FILA_BANCO=0, FECHA_BANCO="",
@@ -395,6 +446,7 @@ def _crear_filas_para_grupo(
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
                 TOTAL_GRUPO=total_grupo,
+                CRUCE_ID="", CANDIDATO_CRUCE_ID=cand_cruce,
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
                 FILA_BANCO=getattr(mov, "_fila_origen", 0),
@@ -425,8 +477,10 @@ def _crear_filas_para_grupo(
 
     mov_id_asignado = ""
     cand_id = candidato_hash
+    cruce_asignado = ""
     if estatus in (EstatusRegistro.CONCILIADO, EstatusRegistro.DIFERENCIA):
         mov_id_asignado = candidato_hash
+        cruce_asignado = cand_cruce
 
     for r in registros:
         fecha_ref = getattr(r, fecha_attr, None)
@@ -435,6 +489,7 @@ def _crear_filas_para_grupo(
             BANCO=archivo_banco, MONEDA=moneda,
             FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
             TOTAL_GRUPO=total_grupo,
+            CRUCE_ID=cruce_asignado, CANDIDATO_CRUCE_ID=cand_cruce,
             MOVIMIENTO_ID=mov_id_asignado,
             CANDIDATO_MOVIMIENTO_ID=cand_id,
             ARCHIVO_BANCO=archivo_banco,
@@ -459,10 +514,13 @@ def _construir_universo_movimientos(
         ref = getattr(m, "referencia", "") or ""
         concepto = getattr(m, "concepto", "") or ""
         fecha = getattr(m, "fecha", None)
+        archivo_origen = getattr(m, "_archivo_origen", archivo_banco)
+        empresa = _extraer_empresa(archivo_origen)
         records.append(BankMovementRecord(
             MOVIMIENTO_ID=_movimiento_id_hash(m, archivo_banco),
-            ARCHIVO_BANCO=archivo_banco,
+            ARCHIVO_BANCO=archivo_origen,
             FILA_BANCO=getattr(m, "_fila_origen", 0),
+            EMPRESA=empresa,
             BANCO=getattr(m, "banco", "") or "",
             CUENTA=getattr(m, "cuenta", "") or "",
             MONEDA=getattr(m, "moneda", "") or "",
@@ -476,6 +534,37 @@ def _construir_universo_movimientos(
             NATURALEZA="CARGO" if _es_cargo(m) else ("ABONO" if _es_abono(m) else "MIXTO"),
         ))
     return records
+
+
+def asignar_cruce_ids(records: list[BankMovementRecord]) -> dict[str, str]:
+    """Assign deterministic CRUCE_ID to each BankMovementRecord.
+
+    Sorting: EMPRESA -> TIPO -> BANCO -> FECHA -> ARCHIVO_ORIGEN -> FILA_ORIGEN -> MOVIMIENTO_ID
+    Consecutivo restarts at 001 for each unique EMPRESA+TIPO+BANCO.
+
+    Returns a dict mapping MOVIMIENTO_ID -> CRUCE_ID.
+    """
+    def sort_key(r: BankMovementRecord):
+        tipo = _naturaleza_tipo_cruce(r.NATURALEZA)
+        banco_code = _mapear_banco_code(r.BANCO)
+        return (r.EMPRESA, tipo, banco_code, r.FECHA, r.ARCHIVO_BANCO, r.FILA_BANCO, r.MOVIMIENTO_ID)
+
+    sorted_records = sorted(records, key=sort_key)
+
+    counters: dict[tuple, int] = defaultdict(int)
+    mapping: dict[str, str] = {}
+
+    for r in sorted_records:
+        tipo = _naturaleza_tipo_cruce(r.NATURALEZA)
+        banco_code = _mapear_banco_code(r.BANCO)
+        key = (r.EMPRESA, tipo, banco_code)
+        counters[key] += 1
+        consecutivo = f"{counters[key]:03d}"
+        cruce_id = f"{r.EMPRESA}-{tipo}-{banco_code}-{consecutivo}"
+        r.CRUCE_ID = cruce_id
+        mapping[r.MOVIMIENTO_ID] = cruce_id
+
+    return mapping
 
 
 def conciliar_banco_first(
@@ -494,6 +583,8 @@ def conciliar_banco_first(
     result.movimientos_universo = _construir_universo_movimientos(
         movimientos_bancarios, archivo_banco,
     )
+
+    cruce_id_map = asignar_cruce_ids(result.movimientos_universo)
 
     index_xml = {}
     for cfdi in cfdis:
@@ -521,6 +612,7 @@ def conciliar_banco_first(
         filas = _crear_filas_para_grupo(
             grupo_id, registros, busqueda, total_grupo,
             config, archivo_banco, Naturaleza.EGRESOS, mov_asig_eg,
+            cruce_id_map,
         )
         result.filas.extend(filas)
 
@@ -534,6 +626,7 @@ def conciliar_banco_first(
         filas = _crear_filas_para_grupo(
             grupo_id, registros, busqueda, total_grupo,
             config, archivo_banco, Naturaleza.INGRESOS, mov_asig_ing,
+            cruce_id_map,
         )
         result.filas.extend(filas)
 

@@ -174,6 +174,7 @@ def _df_to_movimientos(df, archivo: str):
                 referencia=ref,
             )
             m._fila_origen = idx + 2
+            m._archivo_origen = archivo
             movimientos.append(m)
         except Exception:
             continue

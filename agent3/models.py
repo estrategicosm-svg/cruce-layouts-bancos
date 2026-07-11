@@ -28,7 +28,9 @@ class EstatusRegistro(str, Enum):
 class TablaIntermediateRow:
     """Una fila de la tabla intermedia auditable.
 
+    CRUCE_ID = identificador corto operativo (EMPRESA-TIPO-BANCO-CONSECUTIVO).
     MOVIMIENTO_ID = hash del movimiento asignado definitivamente (CONCILIADO/DIFERENCIA).
+    CANDIDATO_CRUCE_ID = CRUCE_ID del candidato evaluado (PROPUESTA/AMBIGUO).
     CANDIDATO_MOVIMIENTO_ID = hash del candidato evaluado (PROPUESTA/AMBIGUO).
     """
 
@@ -39,6 +41,8 @@ class TablaIntermediateRow:
     MONEDA: str
     FECHA_LAYOUT: str
     TOTAL_GRUPO: Decimal
+    CRUCE_ID: str
+    CANDIDATO_CRUCE_ID: str
     MOVIMIENTO_ID: str
     CANDIDATO_MOVIMIENTO_ID: str
     ARCHIVO_BANCO: str
@@ -60,6 +64,8 @@ class TablaIntermediateRow:
             "MONEDA": self.MONEDA,
             "FECHA_LAYOUT": self.FECHA_LAYOUT,
             "TOTAL_GRUPO": str(self.TOTAL_GRUPO),
+            "CRUCE_ID": self.CRUCE_ID,
+            "CANDIDATO_CRUCE_ID": self.CANDIDATO_CRUCE_ID,
             "MOVIMIENTO_ID": self.MOVIMIENTO_ID,
             "CANDIDATO_MOVIMIENTO_ID": self.CANDIDATO_MOVIMIENTO_ID,
             "ARCHIVO_BANCO": self.ARCHIVO_BANCO,
@@ -82,6 +88,8 @@ COLUMNS_ORDER = [
     "MONEDA",
     "FECHA_LAYOUT",
     "TOTAL_GRUPO",
+    "CRUCE_ID",
+    "CANDIDATO_CRUCE_ID",
     "MOVIMIENTO_ID",
     "CANDIDATO_MOVIMIENTO_ID",
     "ARCHIVO_BANCO",
