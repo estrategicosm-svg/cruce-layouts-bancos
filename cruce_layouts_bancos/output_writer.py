@@ -121,6 +121,7 @@ def generar_excel(
 ) -> dict:
     wb = load_workbook(ASSETS / "LAYOUT_CARGA_EGRESOS_OUTPUT.xlsx")
     ws_eg = wb["DATOS"]
+    ws_eg.title = "EGRESOS"
 
     idx_eg = {}
     for f in filas_egresos:

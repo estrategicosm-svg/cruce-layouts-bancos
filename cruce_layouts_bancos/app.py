@@ -50,7 +50,16 @@ def ejecutar_cruce(
 
     cruce_map = asignar_cruces(res_eg, res_ing)
 
-    info = generar_excel(filas_eg, filas_ing, movimientos, cruce_map, archivo_salida)
+    try:
+        info = generar_excel(filas_eg, filas_ing, movimientos, cruce_map, archivo_salida)
+        excel_bytes = info["bytes"]
+        if not excel_bytes or not excel_bytes[:2] == b"PK":
+            raise RuntimeError("El Excel generado esta vacio o no tiene formato XLSX valido.")
+        excel_error = None
+    except Exception as exc:
+        excel_bytes = b""
+        excel_error = str(exc)
+        info = {"bytes": b"", "archivo": None, "tamaño": 0, "sha256": "", "hojas": []}
 
     enc_eg = sum(1 for r in res_eg if r.estatus == EstatusCruce.ENCONTRADO)
     enc_ing = sum(1 for r in res_ing if r.estatus == EstatusCruce.ENCONTRADO)
@@ -88,7 +97,8 @@ def ejecutar_cruce(
         "MOVIMIENTOS_REUTILIZADOS": 0,
         "MOVIMIENTOS_UNICOS_USADOS": len(movs_used),
         "ARCHIVO": info["archivo"],
-        "EXCEL_BYTES": info["bytes"],
+        "EXCEL_BYTES": excel_bytes,
+        "EXCEL_ERROR": excel_error,
         "TAMAÑO": info["tamaño"],
         "SHA256": info["sha256"],
         "HOJAS": info["hojas"],

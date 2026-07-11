@@ -93,9 +93,10 @@ class TestExcelGeneracionEnMemoria:
             {"CSC|POL001": "CRUCE-001"},
         )
         wb = load_workbook(io.BytesIO(result["bytes"]))
-        assert "DATOS" in wb.sheetnames
+        assert "EGRESOS" in wb.sheetnames
         assert "INGRESOS" in wb.sheetnames
         assert "MOVIMIENTOS_BANCARIOS" in wb.sheetnames
+        assert len(wb.sheetnames) == 3
         wb.close()
 
     def test_archivo_salida_none_no_escribe_a_disco(self, tmp_path):
@@ -152,8 +153,8 @@ class TestSessionStatePersistencia:
         )
         excel_bytes = result["bytes"]
         wb = load_workbook(io.BytesIO(excel_bytes), read_only=True)
-        assert "DATOS" in wb.sheetnames
-        ws = wb["DATOS"]
+        assert "EGRESOS" in wb.sheetnames
+        ws = wb["EGRESOS"]
         assert ws.max_row >= 3
         wb.close()
 
@@ -164,6 +165,6 @@ class TestSessionStatePersistencia:
         )
         assert result["tamaño"] > 0
         assert len(result["sha256"]) == 64
-        assert "DATOS" in result["hojas"]
+        assert "EGRESOS" in result["hojas"]
         assert "INGRESOS" in result["hojas"]
         assert "MOVIMIENTOS_BANCARIOS" in result["hojas"]
