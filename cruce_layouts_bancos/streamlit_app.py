@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -53,9 +56,14 @@ with st.sidebar:
         "Layout Ingresos (.xlsx)", type=["xlsx"],
         help="Layout de cedula de ingresos del sistema contable",
     )
-    f_bancos = st.file_uploader(
-        "ZIP Estados de cuenta", type=["zip"],
+    f_bancos_zip = st.file_uploader(
+        "ZIP Estados de cuenta (.zip)", type=["zip"],
         help="ZIP con PDFs y/o Excel de estados de cuenta bancarios",
+    )
+    f_bancos_pdfs = st.file_uploader(
+        "PDFs sueltos de estados de cuenta", type=["pdf"],
+        accept_multiple_files=True,
+        help="Archivos PDF individuales de estados de cuenta bancarios",
     )
 
     st.markdown("---")
@@ -88,12 +96,31 @@ with st.sidebar:
             )
 
     st.markdown("---")
+    has_input = f_egresos and f_ingresos and (f_bancos_zip or f_bancos_pdfs)
     ejecutar = st.button(
         "Ejecutar cruce",
         type="primary",
         use_container_width=True,
-        disabled=not (f_egresos and f_ingresos and f_bancos),
+        disabled=not has_input,
     )
+
+
+def _combinar_bancos_a_zip(
+    zip_file, pdf_files: list
+) -> tuple[bytes, str, int, int]:
+    buf = io.BytesIO()
+    n_pdfs = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if zip_file is not None:
+            zf.writestr(zip_file.name, zip_file.getvalue())
+        if pdf_files:
+            for pf in pdf_files:
+                zf.writestr(f"PDF_SUELTOS/{pf.name}", pf.getvalue())
+                n_pdfs += 1
+    buf.seek(0)
+    nombre = "BANCOS_COMBINADOS.zip"
+    n_zip = 1 if zip_file else 0
+    return buf.getvalue(), nombre, n_zip, n_pdfs
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -101,9 +128,13 @@ st.markdown("## Conciliador Layouts vs Bancos")
 
 if not ejecutar:
     st.info(
-        "Sube los 3 archivos en la barra lateral y presiona **Ejecutar cruce**."
+        "Sube los archivos en la barra lateral y presiona **Ejecutar cruce**."
     )
     st.stop()
+
+zip_bytes, nombre_zip, n_zip, n_pdfs = _combinar_bancos_a_zip(
+    f_bancos_zip, f_bancos_pdfs
+)
 
 with st.spinner("Procesando..."):
     result = ejecutar_cruce(
@@ -111,11 +142,24 @@ with st.spinner("Procesando..."):
         nombre_egresos=f_egresos.name,
         ingresos_bytes=f_ingresos.getvalue(),
         nombre_ingresos=f_ingresos.name,
-        zip_bancos_bytes=f_bancos.getvalue(),
-        nombre_zip=f_bancos.name,
+        zip_bancos_bytes=zip_bytes,
+        nombre_zip=nombre_zip,
         tolerancia_mxn=tol_mxn,
         tolerancia_usd=tol_usd,
     )
+
+# ── Alertas de lectura ───────────────────────────────────────────────────────
+if result.get("ERRORES_ARCHIVOS"):
+    st.error(
+        f"**{len(result['ERRORES_ARCHIVOS'])} archivo(s) fallaron al procesarse:**"
+    )
+    for err in result["ERRORES_ARCHIVOS"]:
+        st.markdown(
+            f"- **{err.archivo}** ({err.tipo}): {err.error}"
+        )
+
+for adv in result.get("ADVERTENCIAS_LECTURA", []):
+    st.warning(adv)
 
 # ── KPIs ─────────────────────────────────────────────────────────────────────
 c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -125,6 +169,19 @@ c3.metric("Sin candidato", result["SIN_CANDIDATO_TOTAL"])
 c4.metric("Movimientos", result["MOVIMIENTOS_BANCARIOS"])
 c5.metric("TDC excluidas", result["MOVIMIENTOS_TDC"])
 c6.metric("Tiempo", f"{result['TIEMPO']:.1f}s")
+
+# ── Resumen archivos ZIP ─────────────────────────────────────────────────────
+with st.expander("Archivos procesados del ZIP", expanded=False):
+    st.markdown(f"""
+    | Metrica | Cantidad |
+    |---------|----------|
+    | Archivos totales | {result['ARCHIVOS_TOTALES_ZIP']} |
+    | Excel procesados OK | {result['ARCHIVOS_XLSX_OK']} |
+    | PDFs en ZIP | {result['ARCHIVOS_PDF_TOTAL']} |
+    | PDFs procesados OK | {result['ARCHIVOS_PDF_OK']} |
+    | PDFs fallidos | {result['ARCHIVOS_PDF_FALLIDOS']} |
+    | Tesseract OCR | {"Disponible" if result["TESSERACT_DISPONIBLE"] else "NO disponible"} |
+    """)
 
 st.markdown("---")
 

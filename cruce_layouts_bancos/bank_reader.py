@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -12,7 +13,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from cruce_layouts_bancos.models import MovimientoBanco, normalizar_empresa, normalizar_banco
+from cruce_layouts_bancos.models import (
+    ErrorArchivo,
+    MovimientoBanco,
+    ResultadoLecturaBanco,
+    normalizar_empresa,
+    normalizar_banco,
+)
+
+TESSERACT_DISPONIBLE = shutil.which("tesseract") is not None
+
+if TESSERACT_DISPONIBLE:
+    from parsers.pdf_parser import BancoPDFParser
+
 from parsers.banco_parser import BancoParser
 
 
@@ -81,7 +94,33 @@ def _clasificar_tipo_movimiento(cargo: Decimal, abono: Decimal, concepto: str) -
     return ""
 
 
-def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> list[MovimientoBanco]:
+def _procesar_pdf(data: bytes, fname: str, info: dict) -> list[tuple]:
+    if not TESSERACT_DISPONIBLE:
+        raise RuntimeError(
+            f"No fue posible procesar '{fname}' porque falta Tesseract OCR en el servidor. "
+            "Instala tesseract-ocr o usa archivos Excel."
+        )
+    parser = BancoPDFParser()
+    df_pdf, validacion = parser.parsear_pdf(data, fname)
+    if df_pdf is None or df_pdf.empty:
+        advertencias = validacion.get("advertencias", []) if validacion else []
+        msg = f"'{fname}': parser devolvió DataFrame vacío"
+        if advertencias:
+            msg += f" ({'; '.join(advertencias)})"
+        raise ValueError(msg)
+    return df_pdf, validacion
+
+
+def _procesar_excel(data: bytes, fname: str, info: dict) -> list[tuple]:
+    import pandas as pd
+    banco_parser = BancoParser()
+    df = pd.read_excel(io.BytesIO(data))
+    movs = banco_parser.parsear_dataframe(df)
+    return movs
+
+
+def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> ResultadoLecturaBanco:
+    resultado = ResultadoLecturaBanco(tesseract_disponible=TESSERACT_DISPONIBLE)
     banco_parser = BancoParser()
     _SYSTEM = {"__MACOSX", ".DS_Store", "Thumbs.db", "__pycache__"}
     movimientos_raw = []
@@ -100,6 +139,12 @@ def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> list[M
                 and any(n.lower().endswith(ext) for ext in (".pdf", ".xlsx", ".xls"))
             ]
 
+            resultado.archivos_totales = len(compatible)
+
+            pdf_files = [n for n in compatible if n.lower().endswith(".pdf")]
+            xlsx_files = [n for n in compatible if n.lower().endswith((".xlsx", ".xls"))]
+            resultado.archivos_pdf_total = len(pdf_files)
+
             for name in compatible:
                 data = zf.read(name)
                 fname = Path(name).name
@@ -109,22 +154,41 @@ def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> list[M
 
                 try:
                     if ext == ".pdf":
-                        from parsers.pdf_parser import BancoPDFParser
-                        df_pdf, _ = BancoPDFParser().parsear_pdf(data, fname)
-                        if df_pdf is not None and not df_pdf.empty:
-                            movs = banco_parser.parsear_dataframe(df_pdf)
-                            for m in movs:
-                                movimientos_raw.append((ruta_zip, fname, info, m))
-                    else:
-                        import pandas as pd
-                        df = pd.read_excel(io.BytesIO(data))
-                        movs = banco_parser.parsear_dataframe(df)
+                        if not TESSERACT_DISPONIBLE:
+                            raise RuntimeError(
+                                f"'{fname}': Tesseract OCR no está instalado en el servidor. "
+                                "No se puede procesar PDF escaneado. "
+                                "Instala tesseract-ocr en packages.txt o usa archivos Excel."
+                            )
+                        df_pdf, validacion = _procesar_pdf(data, fname, info)
+                        movs = banco_parser.parsear_dataframe(df_pdf)
                         for m in movs:
                             movimientos_raw.append((ruta_zip, fname, info, m))
-                except Exception:
-                    pass
+                        resultado.archivos_pdf_ok += 1
+                    else:
+                        movs = _procesar_excel(data, fname, info)
+                        for m in movs:
+                            movimientos_raw.append((ruta_zip, fname, info, m))
+                        resultado.archivos_xlsx_ok += 1
+                except Exception as exc:
+                    resultado.archivos_pdf_fallidos += 1 if ext == ".pdf" else 0
+                    resultado.errores.append(ErrorArchivo(
+                        archivo=fname,
+                        tipo="PDF" if ext == ".pdf" else "Excel",
+                        error=str(exc),
+                    ))
 
-    resultado: list[MovimientoBanco] = []
+    if not TESSERACT_DISPONIBLE and resultado.archivos_pdf_total > 0:
+        resultado.advertencias.append(
+            f"Se encontraron {resultado.archivos_pdf_total} archivo(s) PDF en el ZIP "
+            "pero Tesseract OCR no está disponible. Los PDFs no fueron procesados."
+        )
+
+    if resultado.archivos_totales > 0 and resultado.archivos_xlsx_ok == 0 and resultado.archivos_pdf_ok == 0:
+        resultado.advertencias.append(
+            "Ningún archivo del ZIP fue procesado exitosamente."
+        )
+
     for ruta_zip, fname, info, m in movimientos_raw:
         cargo = m.cargo if m.cargo else Decimal("0")
         abono = m.abono if m.abono else Decimal("0")
@@ -136,7 +200,7 @@ def leer_zip_bancos(zip_bytes: bytes, nombre_zip: str = "ESTADOS.zip") -> list[M
             except Exception:
                 fecha = str(m.fecha)
 
-        resultado.append(MovimientoBanco(
+        resultado.movimientos.append(MovimientoBanco(
             archivo_origen=fname,
             ruta_interna_zip=ruta_zip,
             empresa_detectada=info["empresa"],

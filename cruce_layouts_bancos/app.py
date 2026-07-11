@@ -33,7 +33,8 @@ def ejecutar_cruce(
 
     filas_eg = leer_layout(io.BytesIO(egresos_bytes), nombre_egresos, hint="EGRESOS")
     filas_ing = leer_layout(io.BytesIO(ingresos_bytes), nombre_ingresos, hint="INGRESOS")
-    movimientos = leer_zip_bancos(zip_bancos_bytes, nombre_zip)
+    lectura = leer_zip_bancos(zip_bancos_bytes, nombre_zip)
+    movimientos = lectura.movimientos
 
     mov_cargos = [m for m in movimientos if m.cargo > Decimal("0") and not m.es_tdc]
     mov_abonos = [m for m in movimientos if m.abono > Decimal("0") and not m.es_tdc]
@@ -99,4 +100,12 @@ def ejecutar_cruce(
         "resultados_ing": res_ing,
         "cruce_map": cruce_map,
         "movimientos": movimientos,
+        "ARCHIVOS_TOTALES_ZIP": lectura.archivos_totales,
+        "ARCHIVOS_XLSX_OK": lectura.archivos_xlsx_ok,
+        "ARCHIVOS_PDF_TOTAL": lectura.archivos_pdf_total,
+        "ARCHIVOS_PDF_OK": lectura.archivos_pdf_ok,
+        "ARCHIVOS_PDF_FALLIDOS": lectura.archivos_pdf_fallidos,
+        "ERRORES_ARCHIVOS": lectura.errores,
+        "ADVERTENCIAS_LECTURA": lectura.advertencias,
+        "TESSERACT_DISPONIBLE": lectura.tesseract_disponible,
     }

@@ -113,6 +113,26 @@ class MovimientoBanco:
 
 
 @dataclass
+class ErrorArchivo:
+    archivo: str
+    tipo: str
+    error: str
+
+
+@dataclass
+class ResultadoLecturaBanco:
+    movimientos: list[MovimientoBanco] = field(default_factory=list)
+    archivos_totales: int = 0
+    archivos_xlsx_ok: int = 0
+    archivos_pdf_total: int = 0
+    archivos_pdf_ok: int = 0
+    archivos_pdf_fallidos: int = 0
+    errores: list[ErrorArchivo] = field(default_factory=list)
+    advertencias: list[str] = field(default_factory=list)
+    tesseract_disponible: bool = False
+
+
+@dataclass
 class ResultadoCruce:
     grupo: GrupoPoliza
     estatus: EstatusCruce
