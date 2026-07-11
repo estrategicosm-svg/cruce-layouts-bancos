@@ -27,7 +27,6 @@ class ConciliadorIngresos:
         registros: list[CedulaIngresoRegistro],
         cfdis: list[CFDI],
         movimientos: list[MovimientoBancario],
-        moneda_banco: str,
     ) -> ResultadoConciliacionIngresos:
         indices_cfdi = {cfdi.uuid.upper(): cfdi for cfdi in cfdis if cfdi.uuid}
         indices_bancarios: dict[str, list[MovimientoBancario]] = defaultdict(list)
@@ -37,9 +36,6 @@ class ConciliadorIngresos:
 
         resultados: list[CedulaIngresoRegistro] = []
         for registro in registros:
-            if registro.moneda.upper() != moneda_banco.upper():
-                resultados.append(registro)
-                continue
             try:
                 resultados.append(self._conciliar_registro(registro, indices_cfdi, indices_bancarios))
             except Exception as exc:
@@ -107,10 +103,11 @@ class ConciliadorIngresos:
     ) -> MovimientoBancario | None:
         if registro.folio_transferencia:
             movimientos = indices_bancarios.get(registro.folio_transferencia, [])
-            if len(movimientos) == 1:
-                return movimientos[0]
-            if len(movimientos) > 1:
-                exactos = [mov for mov in movimientos if abs(mov.monto - registro.total) <= self.tolerancia]
+            mismoneda = [m for m in movimientos if m.moneda.upper() == registro.moneda.upper()]
+            if len(mismoneda) == 1:
+                return mismoneda[0]
+            if len(mismoneda) > 1:
+                exactos = [mov for mov in mismoneda if abs(mov.monto - registro.total) <= self.tolerancia]
                 return exactos[0] if len(exactos) == 1 else None
         return self._busqueda_flexible(registro, indices_bancarios)
 
@@ -123,7 +120,8 @@ class ConciliadorIngresos:
             mov
             for movimientos in indices_bancarios.values()
             for mov in movimientos
-            if abs(mov.monto - registro.total) <= self.tolerancia
+            if mov.moneda.upper() == registro.moneda.upper()
+            and abs(mov.monto - registro.total) <= self.tolerancia
             and abs((registro.fecha - mov.fecha).days) <= self.dias_tolerancia
         ]
         return candidatos[0] if len(candidatos) == 1 else None

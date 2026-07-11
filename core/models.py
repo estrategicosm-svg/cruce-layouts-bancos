@@ -27,6 +27,7 @@ class CFDI:
     serie: Optional[str] = None
     folio: Optional[str] = None
     archivo: Optional[str] = None
+    origen_xml: str = ""
     validado: bool = False
     errores: list[str] = field(default_factory=list)
 

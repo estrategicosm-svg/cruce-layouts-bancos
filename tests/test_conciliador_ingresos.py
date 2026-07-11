@@ -62,14 +62,14 @@ def test_registro_usd_no_concilia_contra_banco_mxn():
     movimiento = _movimiento("TRF001", "5000.00")
 
     conciliador = ConciliadorIngresos()
-    resultado = conciliador.conciliar([registro], [cfdi], [movimiento], "MXN")
+    resultado = conciliador.conciliar([registro], [cfdi], [movimiento])
 
     assert len(resultado.registros) == 1
     r = resultado.registros[0]
     assert r.folio_conciliacion is None
-    assert r.cfdi is None
+    assert r.cfdi is not None
     assert r.movimiento is None
-    assert r.estatus is None
+    assert r.estatus == "SIN BANCO"
 
 
 def test_registro_mxn_concilia_con_banco_mxn():
@@ -78,7 +78,7 @@ def test_registro_mxn_concilia_con_banco_mxn():
     movimiento = _movimiento("TRF001", "11600.00")
 
     conciliador = ConciliadorIngresos()
-    resultado = conciliador.conciliar([registro], [cfdi], [movimiento], "MXN")
+    resultado = conciliador.conciliar([registro], [cfdi], [movimiento])
 
     assert len(resultado.registros) == 1
     r = resultado.registros[0]
@@ -96,7 +96,7 @@ def test_folio_empieza_en_300():
     cfdis = [_cfdi("UUID-1", "11600.00"), _cfdi("UUID-2", "200.00")]
     movimientos = [_movimiento("TRF001", "11600.00"), _movimiento("TRF002", "200.00")]
 
-    resultado = conciliador.conciliar(registros, cfdis, movimientos, "MXN")
+    resultado = conciliador.conciliar(registros, cfdis, movimientos)
 
     r1, r2 = resultado.registros
     assert r1.folio_conciliacion is None
@@ -115,7 +115,7 @@ def test_folio_empieza_en_300():
 def test_registro_sin_xml_no_concilia():
     registro = _registro("UUID-INEXISTENTE", "MXN", "11600.00", "TRF001")
     conciliador = ConciliadorIngresos()
-    resultado = conciliador.conciliar([registro], [], [], "MXN")
+    resultado = conciliador.conciliar([registro], [], [])
 
     assert len(resultado.registros) == 1
     r = resultado.registros[0]

@@ -36,15 +36,18 @@ class XMLParser:
     def __init__(self) -> None:
         self.errores: list[str] = []
 
-    def parsear_xml(self, contenido: bytes, nombre_archivo: str | None = None) -> Optional[CFDI]:
+    def parsear_xml(self, contenido: bytes, nombre_archivo: str | None = None, origen_xml: str = "") -> Optional[CFDI]:
         try:
             root = ET.fromstring(contenido)
-            return self._extraer_datos(root, nombre_archivo)
+            cfdi = self._extraer_datos(root, nombre_archivo)
+            if cfdi and origen_xml:
+                cfdi.origen_xml = origen_xml
+            return cfdi
         except Exception as exc:
             self.errores.append(f"{nombre_archivo or 'XML'}: {exc}")
             return None
 
-    def parsear_zip(self, archivo_zip: bytes) -> ParseZipResult:
+    def parsear_zip(self, archivo_zip: bytes, origen_xml: str = "") -> ParseZipResult:
         resultado = ParseZipResult()
         try:
             with zipfile.ZipFile(io.BytesIO(archivo_zip)) as zf:
@@ -62,7 +65,7 @@ class XMLParser:
                             resultado.fallos.append({"archivo": nombre, "error": error_msg})
                             self.errores.append(error_msg)
                             continue
-                        cfdi = self.parsear_xml(contenido, nombre)
+                        cfdi = self.parsear_xml(contenido, nombre, origen_xml)
                         if cfdi:
                             resultado.exitosos.append(cfdi)
                         else:
