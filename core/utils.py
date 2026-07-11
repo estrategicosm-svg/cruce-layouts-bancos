@@ -51,6 +51,19 @@ _DATE_FORMATS = (
     "%d %B %Y",
 )
 
+_ES_MONTHS = {
+    "ENE": "Jan", "FEB": "Feb", "MAR": "Mar", "ABR": "Apr",
+    "MAY": "May", "JUN": "Jun", "JUL": "Jul", "AGO": "Aug",
+    "SEP": "Sep", "OCT": "Oct", "NOV": "Nov", "DIC": "Dec",
+}
+
+
+def _traducir_meses_es(s: str) -> str:
+    """Replace Spanish month abbreviations with English for %b parsing."""
+    for es, en in _ES_MONTHS.items():
+        s = re.sub(r"\b" + es + r"\b", en, s, flags=re.IGNORECASE)
+    return s
+
 
 def to_datetime(valor: Any) -> datetime:
     if isinstance(valor, datetime):
@@ -58,12 +71,13 @@ def to_datetime(valor: Any) -> datetime:
     if valor is None or pd.isna(valor):
         return datetime.min
     s = str(valor).strip()
+    s_en = _traducir_meses_es(s)
     for fmt in _DATE_FORMATS:
         try:
-            return datetime.strptime(s, fmt)
+            return datetime.strptime(s_en, fmt)
         except ValueError:
             continue
-    fecha = pd.to_datetime(valor, errors="coerce", dayfirst=False)
+    fecha = pd.to_datetime(s_en, errors="coerce", dayfirst=False)
     if pd.isna(fecha):
         return datetime.min
     ts = fecha.floor("us")

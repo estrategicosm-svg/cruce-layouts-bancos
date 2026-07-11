@@ -346,3 +346,25 @@ class TestBlockerNanoseconds:
         result = to_datetime("2024-02-15 14:30:00.123456")
         assert result.year == 2024
         assert result.microsecond == 123456
+
+
+class TestSpanishMonths:
+    def test_to_datetime_ago(self):
+        """to_datetime parses Spanish 'AGO' as August."""
+        result = to_datetime("19 AGO 2024")
+        assert result == datetime(2024, 8, 19)
+
+    def test_to_datetime_ene(self):
+        """to_datetime parses Spanish 'ENE' as January."""
+        result = to_datetime("01 ENE 2024")
+        assert result == datetime(2024, 1, 1)
+
+    def test_to_datetime_dic(self):
+        """to_datetime parses Spanish 'DIC' as December."""
+        result = to_datetime("25 DIC 2023")
+        assert result == datetime(2023, 12, 25)
+
+    def test_to_datetime_lowercase_spanish(self):
+        """to_datetime parses lowercase Spanish month abbreviations."""
+        result = to_datetime("15 mar 2024")
+        assert result == datetime(2024, 3, 15)
