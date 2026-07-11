@@ -16,6 +16,7 @@ from exportadores.excel_generator import ExcelGenerator
 from exportadores.reportes import registros_a_dataframe, registros_ingresos_a_dataframe, resumen_a_dataframe
 from parsers.banco_parser import BancoParser
 from parsers.cedula_ingresos_parser import CedulaIngresosParser
+from parsers.layout_detector import detectar_layout
 from parsers.cedula_parser import CedulaParser
 from parsers.xml_parser import XMLParser
 
@@ -314,15 +315,24 @@ class SATConciliatorApp:
         tolerancia: Decimal, dias_tolerancia: int,
     ) -> None:
         with st.spinner("Procesando conciliacion..."):
-            cedula_parser = CedulaParser()
-            xml_parser = XMLParser()
             errores_totales: list[str] = []
 
-            # --- Parse egresos ---
-            cedula = cedula_parser.parsear_excel(cedula_file) if cedula_file else []
-            errores_totales.extend(cedula_parser.errores)
+            # --- Validate and parse egresos ---
+            cedula = []
+            if cedula_file:
+                cedula_parser = CedulaParser()
+                cedula_parser.parsear_excel(cedula_file)
+                cedula = cedula_parser.parsear_excel(cedula_file)
+                errores_totales.extend(cedula_parser.errores)
+                if cedula_parser.detection:
+                    d = cedula_parser.detection
+                    st.info(
+                        f"Cedula Egresos: layout={d.layout_type.value}, "
+                        f"hoja=DATOS, fila_encabezado={d.header_row + 1}, "
+                        f"filas={len(cedula)}, columnas={d.columns_recognized}"
+                    )
 
-            # --- Parse ingresos ---
+            # --- Validate and parse ingresos ---
             cedula_ingresos = st.session_state.cedula_ingresos
             if ingresos_file:
                 ingresos_parser = CedulaIngresosParser()
@@ -333,6 +343,13 @@ class SATConciliatorApp:
                     st.session_state.ingresos_hash = nuevo_hash
                     st.session_state.ingresos_folio_counter = 300
                 errores_totales.extend(ingresos_parser.errores)
+                if ingresos_parser.detection:
+                    d = ingresos_parser.detection
+                    st.info(
+                        f"Cedula Ingresos: layout={d.layout_type.value}, "
+                        f"hoja=DATOS, fila_encabezado={d.header_row + 1}, "
+                        f"filas={len(cedula_ingresos or [])}, columnas={d.columns_recognized}"
+                    )
 
             # --- Parse banco (ZIP / PDF / XLSX) ---
             banco_parser = BancoParser()
@@ -355,6 +372,8 @@ class SATConciliatorApp:
                 movimientos = banco_parser.parsear_excel(banco_file)
                 st.session_state.bank_control_df = None
             errores_totales.extend(banco_parser.errores)
+
+            xml_parser = XMLParser()
 
             # --- Parse XML emitidos ---
             cfdis_emitidos = []

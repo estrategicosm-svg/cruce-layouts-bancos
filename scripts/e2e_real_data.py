@@ -29,6 +29,8 @@ from agent3.models import EstatusRegistro, COLUMNS_ORDER
 from core.models import CedulaIngresoRegistro, CedulaRegistro, MovimientoBancario
 from core.utils import normalizar_referencia, normalizar_uuid, to_decimal, to_datetime
 from parsers.banco_parser import BancoParser
+from parsers.cedula_parser import CedulaParser
+from parsers.cedula_ingresos_parser import CedulaIngresosParser
 from parsers.xml_parser import XMLParser
 
 PAQUETE = Path(r"C:\Users\USER\Downloads\PAQUETE PARA SUBIR")
@@ -56,76 +58,27 @@ def _to_datetime(v) -> datetime:
 
 
 def _load_egresos() -> list[CedulaRegistro]:
-    wb = openpyxl.load_workbook(
-        str(PAQUETE / "LAYOUT_CARGA_EGRESOS.xlsx"),
-        read_only=True, data_only=True,
-    )
-    ws = wb["DATOS"]
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
-    header_row = rows[1]
-    cols = {str(h).strip().upper(): i for i, h in enumerate(header_row) if h}
-    egresos = []
-    for row in rows[2:]:
-        if not row or not any(row):
-            continue
-        try:
-            egresos.append(CedulaRegistro(
-                poliza=str(row[cols.get("POLIZA", 1)] or ""),
-                cliente=str(row[cols.get("PROVEEDOR", 4)] or ""),
-                rfc=str(row[cols.get("RFC_PROVEEDOR", 3)] or ""),
-                uuid=normalizar_uuid(row[cols.get("UUID", 2)] or ""),
-                importe=_to_decimal(row[cols.get("TOTAL PESOS", 8)]),
-                base_iva_16=_to_decimal(row[cols.get("TOTAL PESOS", 8)]),
-                base_iva_8=Decimal("0"),
-                base_iva_0=Decimal("0"),
-                exentos=Decimal("0"),
-                iva=Decimal("0"),
-                retenciones=Decimal("0"),
-                moneda=str(row[cols.get("MONEDA", 7)] or "MXN"),
-                tipo_cambio=Decimal("1"),
-                fecha_pago=_to_datetime(row[cols.get("FECHA_PAGO", 6)]),
-                banco=str(row[cols.get("BANCO", 10)] or ""),
-                cruce_bancario="",
-                empresa=str(row[cols.get("EMPRESA", 0)] or "SAT"),
-            ))
-        except Exception:
-            continue
-    return egresos
+    parser = CedulaParser()
+    with open(PAQUETE / "LAYOUT_CARGA_EGRESOS.xlsx", "rb") as f:
+        regs = parser.parsear_excel(f, "EGRESOS")
+    print(f"    Egresos detection: layout={parser.detection.layout_type.value}, "
+          f"header_row={parser.detection.header_row + 1}, "
+          f"columns={parser.detection.columns_recognized}")
+    if parser.errores:
+        print(f"    Egresos errors: {parser.errores[:3]}")
+    return regs
 
 
 def _load_ingresos() -> list[CedulaIngresoRegistro]:
-    wb = openpyxl.load_workbook(
-        str(PAQUETE / "LAYOUT_CEDULA_INGRESOS.xlsx"),
-        read_only=True, data_only=True,
-    )
-    ws = wb["DATOS"]
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
-    header_row = rows[1]
-    cols = {str(h).strip().upper(): i for i, h in enumerate(header_row) if h}
-    ingresos = []
-    for row in rows[2:]:
-        if not row or not any(row):
-            continue
-        try:
-            ingresos.append(CedulaIngresoRegistro(
-                uuid=normalizar_uuid(row[cols.get("UUID", 2)] or ""),
-                cliente=str(row[cols.get("CLIENTE", 4)] or ""),
-                rfc=str(row[cols.get("RFC_CLIENTE", 3)] or ""),
-                factura=str(row[cols.get("POLIZA", 1)] or ""),
-                fecha=_to_datetime(row[cols.get("FECHA_COBRO", 6)]),
-                total=_to_decimal(row[cols.get("TOTAL PESOS", 8)]),
-                moneda=str(row[cols.get("MONEDA", 7)] or "MXN"),
-                amount_mxn=_to_decimal(row[cols.get("TOTAL PESOS", 8)]),
-                amount_usd=_to_decimal(row[cols.get("TOTAL DLS", 9)]),
-                forma_pago="",
-                folio_transferencia=normalizar_referencia(row[cols.get("BANCO", 10)] or ""),
-                descripcion=str(row[cols.get("EMPRESA", 0)] or ""),
-            ))
-        except Exception:
-            continue
-    return ingresos
+    parser = CedulaIngresosParser()
+    with open(PAQUETE / "LAYOUT_CEDULA_INGRESOS.xlsx", "rb") as f:
+        regs = parser.parsear_excel(f, "INGRESOS")
+    print(f"    Ingresos detection: layout={parser.detection.layout_type.value}, "
+          f"header_row={parser.detection.header_row + 1}, "
+          f"columns={parser.detection.columns_recognized}")
+    if parser.errores:
+        print(f"    Ingresos errors: {parser.errores[:3]}")
+    return regs
 
 
 def _load_movimientos_zip() -> tuple[list[MovimientoBancario], pd.DataFrame]:

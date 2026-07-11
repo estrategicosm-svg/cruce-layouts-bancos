@@ -74,5 +74,5 @@ def test_parsea_estructura_correcta():
 def test_faltan_columnas_lanza_error():
     df = pd.DataFrame([{"Cliente": "X"}])
     parser = CedulaIngresosParser()
-    with pytest.raises(ValueError, match="Faltan columnas requeridas"):
+    with pytest.raises(ValueError, match="columnas requeridas no encontradas"):
         parser.parsear_dataframe(df)
