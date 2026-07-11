@@ -1,22 +1,13 @@
 """Dashboard Streamlit - Cruce de layouts vs estados de cuenta bancarios."""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-_HERE = Path(__file__).resolve().parent
-_REPO = _HERE.parent
-
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
 
 import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
 
-from app import ejecutar_cruce
+from cruce_layouts_bancos.app import ejecutar_cruce
 
 st.set_page_config(
     page_title="Conciliador Layouts vs Bancos",
@@ -68,7 +59,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### Descargas")
-    assets = Path(__file__).parent / "assets"
+    assets = Path(__file__).parent / "cruce_layouts_bancos" / "assets"
     for fname, label in [
         ("LAYOUT_CARGA_EGRESOS_OUTPUT.xlsx", "Template Egresos"),
         ("LAYOUT_CEDULA_INGRESOS_OUTPUT.xlsx", "Template Ingresos"),
