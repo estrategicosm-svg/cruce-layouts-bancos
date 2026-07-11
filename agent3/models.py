@@ -41,6 +41,7 @@ class TablaIntermediateRow:
     MONEDA: str
     FECHA_LAYOUT: str
     TOTAL_GRUPO: Decimal
+    NUM_XML_GRUPO: int
     CRUCE_ID: str
     CANDIDATO_CRUCE_ID: str
     MOVIMIENTO_ID: str
@@ -64,6 +65,7 @@ class TablaIntermediateRow:
             "MONEDA": self.MONEDA,
             "FECHA_LAYOUT": self.FECHA_LAYOUT,
             "TOTAL_GRUPO": str(self.TOTAL_GRUPO),
+            "NUM_XML_GRUPO": self.NUM_XML_GRUPO,
             "CRUCE_ID": self.CRUCE_ID,
             "CANDIDATO_CRUCE_ID": self.CANDIDATO_CRUCE_ID,
             "MOVIMIENTO_ID": self.MOVIMIENTO_ID,
@@ -88,6 +90,7 @@ COLUMNS_ORDER = [
     "MONEDA",
     "FECHA_LAYOUT",
     "TOTAL_GRUPO",
+    "NUM_XML_GRUPO",
     "CRUCE_ID",
     "CANDIDATO_CRUCE_ID",
     "MOVIMIENTO_ID",

@@ -173,6 +173,7 @@ class TestSoloMontoExactoPropuesta:
         assert rows[0].TIPO_MATCH == TipoMatch.MONTO
         assert rows[0].NIVEL_CONFIANZA == "BAJA"
         assert rows[0].MOVIMIENTO_ID == ""
+        assert rows[0].CRUCE_ID == ""
 
 
 # ---------------------------------------------------------------------------

@@ -374,7 +374,7 @@ class TestModelColumns:
         row = TablaIntermediateRow(
             GRUPO_ID="egreso_P001", POLIZA="P001", EMPRESA="SAT",
             BANCO="test.pdf", MONEDA="MXN", FECHA_LAYOUT="2024-02-15",
-            TOTAL_GRUPO=Decimal("100"), CRUCE_ID="CSC-EGR-BNMX-001",
+            TOTAL_GRUPO=Decimal("100"), NUM_XML_GRUPO=1, CRUCE_ID="CSC-EGR-BNMX-001",
             CANDIDATO_CRUCE_ID="", MOVIMIENTO_ID="",
             CANDIDATO_MOVIMIENTO_ID="", ARCHIVO_BANCO="test.pdf",
             FILA_BANCO=0, FECHA_BANCO="",

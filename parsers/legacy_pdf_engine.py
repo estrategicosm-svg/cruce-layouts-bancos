@@ -56,6 +56,22 @@ def clean_number(val):
     except ValueError:
         return None
 
+def _append_year_to_date(date_str: str, periodo: str) -> str:
+    """Append year from periodo to a date string that lacks year."""
+    if not date_str or not periodo:
+        return date_str
+    if re.search(r'\d{4}', date_str):
+        return date_str
+    m = re.search(r'(\d{4})', periodo)
+    if not m:
+        return date_str
+    year = m.group(1)
+    if '/' in date_str:
+        return f"{date_str}/{year}"
+    else:
+        return f"{date_str} {year}"
+
+
 def detect_pdf_type(pdf_path):
     """
     Detecta si el PDF es digital (nativo) o escaneado (imágenes).
@@ -309,6 +325,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
     warnings_log = []
     text_bruto = []
     recap_data = None
+    periodo = ""
     
     for page_idx, page_lines in enumerate(pages_words):
         page_num = page_idx + 1
@@ -355,6 +372,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
                 m_period = re.search(r"Statement Period:\s*([^\n]+)", line_str, re.IGNORECASE)
                 if m_period and recap_data:
                     recap_data['periodo'] = m_period.group(1).strip()
+                    periodo = recap_data['periodo']
             
         current_section = "OTHER"  # Reset section for each page
         
@@ -404,7 +422,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
                                 'archivo': file_name,
                                 'pagina': page_num,
                                 'metodo': method_used,
-                                'fecha': t,
+                                'fecha': _append_year_to_date(t, periodo),
                                 'concepto': "Deposit",
                                 'referencia': "",
                                 'cargo': None,
@@ -436,7 +454,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
                 line_norm = normalize_line_with_segments(line)
                 match_date = re.match(r"^(\d{2}/\d{2})\b", line_norm)
                 if match_date:
-                    date_str = match_date.group(1)
+                    date_str = _append_year_to_date(match_date.group(1), periodo)
                     rest = line_norm[match_date.end():].strip()
                     
                     amounts = REGEX_AMOUNT.findall(rest)
@@ -472,7 +490,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
                             'importe_1': amount_val,
                             'importe_2': None,
                             'importe_3': None,
-                            'original_fecha': date_str,
+                            'original_fecha': match_date.group(1),
                             'original_concepto': concept_str,
                             'original_cargo': "",
                             'original_abono': amount_str,
@@ -486,7 +504,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
                 line_norm = normalize_line_with_segments(line)
                 match_date = re.match(r"^(\d{2}/\d{2})\b", line_norm)
                 if match_date:
-                    date_str = match_date.group(1)
+                    date_str = _append_year_to_date(match_date.group(1), periodo)
                     rest = line_norm[match_date.end():].strip()
                     
                     amounts = REGEX_AMOUNT.findall(rest)
@@ -522,7 +540,7 @@ def parse_ibc_statement(pages_words, file_name, method_used):
                             'importe_1': amount_val,
                             'importe_2': None,
                             'importe_3': None,
-                            'original_fecha': date_str,
+                            'original_fecha': match_date.group(1),
                             'original_concepto': concept_str,
                             'original_cargo': amount_str,
                             'original_abono': "",
@@ -1001,7 +1019,7 @@ def parse_banamex_statement(pages_words, file_name, method_used):
                 if current_tx:
                     transactions.append(current_tx)
                     
-                fecha_str = match_fecha.group(1)
+                fecha_str = _append_year_to_date(match_fecha.group(1), periodo)
                 concept_str = line_str[match_fecha.end():].strip()
                 
                 current_tx = {
@@ -1762,6 +1780,7 @@ def parse_monex_statement(pages_words, file_name, method_used):
     
     import re
     date_pattern = re.compile(r"^(\d{2}/[A-Z][a-z]{2})\s+(.*)")
+    periodo = ""
     
     for page_idx, lines in enumerate(pages_words):
         prev_y = None
@@ -1777,6 +1796,12 @@ def parse_monex_statement(pages_words, file_name, method_used):
                 parts = line_str.split('CONTRATO:')
                 if len(parts) > 1 and parts[1].strip():
                     recap['cuenta'] = parts[1].strip().split()[0]
+                    
+            if not periodo and ('Periodo' in line_str or 'PERIODO' in line_str):
+                m_per = re.search(r"Periodo\s*:\s*([^\n]+)", line_str, re.IGNORECASE)
+                if m_per:
+                    periodo = m_per.group(1).strip()
+                    recap['periodo'] = periodo
                     
             if gap > 14.0 and current_block:
                 blocks.append(current_block)
@@ -1798,7 +1823,7 @@ def parse_monex_statement(pages_words, file_name, method_used):
                 match = date_pattern.search(line_str)
                 if match:
                     is_tx = True
-                    tx_date = match.group(1)
+                    tx_date = _append_year_to_date(match.group(1), periodo)
                     rest = match.group(2)
                     tokens = rest.split()
                     amounts = []

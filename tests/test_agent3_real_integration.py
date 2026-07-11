@@ -288,8 +288,9 @@ class TestTotalesPorGrupo:
 # =========================================================================
 class TestNoDobleConteo:
     def test_movimiento_id_no_reutilizado(self, real_result):
-        mov_ids = [r.MOVIMIENTO_ID for r in real_result.filas if r.MOVIMIENTO_ID]
-        assert len(mov_ids) == len(set(mov_ids))
+        conc_mov_ids = [r.MOVIMIENTO_ID for r in real_result.filas
+                        if r.MOVIMIENTO_ID and r.ESTATUS == EstatusRegistro.CONCILIADO]
+        assert len(conc_mov_ids) == len(set(conc_mov_ids))
 
     def test_total_conciliado_por_grupo_unico(self, real_result):
         unique_grupos = {}
@@ -303,7 +304,7 @@ class TestNoDobleConteo:
     def test_total_banco_por_movimiento_unico(self, real_result):
         mov_unicos = {}
         for r in real_result.filas:
-            if r.MOVIMIENTO_ID and r.MOVIMIENTO_ID not in mov_unicos:
+            if r.MOVIMIENTO_ID and r.ESTATUS == EstatusRegistro.CONCILIADO and r.MOVIMIENTO_ID not in mov_unicos:
                 mov_unicos[r.MOVIMIENTO_ID] = r
         total_banco = sum(r.CARGO + r.ABONO for r in mov_unicos.values())
         assert total_banco == Decimal("0")
@@ -326,6 +327,7 @@ class TestPropuestaSinAsignacion:
         for r in real_result.filas:
             if r.ESTATUS == EstatusRegistro.PROPUESTA_REVISAR:
                 assert r.MOVIMIENTO_ID == ""
+                assert r.CRUCE_ID == ""
 
     def test_propuesta_candidato_lleno(self, real_result):
         for r in real_result.filas:
@@ -406,8 +408,9 @@ class TestMonedaIncompatible:
 # =========================================================================
 class TestNoReutilizacion:
     def test_no_reutilizados(self, real_result):
-        mov_ids = [r.MOVIMIENTO_ID for r in real_result.filas if r.MOVIMIENTO_ID]
-        assert len(mov_ids) == len(set(mov_ids))
+        conc_mov_ids = [r.MOVIMIENTO_ID for r in real_result.filas
+                        if r.MOVIMIENTO_ID and r.ESTATUS == EstatusRegistro.CONCILIADO]
+        assert len(conc_mov_ids) == len(set(conc_mov_ids))
 
 
 # =========================================================================

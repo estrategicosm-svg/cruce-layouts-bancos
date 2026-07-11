@@ -72,6 +72,7 @@ class CedulaRegistro:
     fecha_pago: datetime
     banco: str
     cruce_bancario: str
+    empresa: Optional[str] = None
     estatus: Optional[str] = None
     observaciones: Optional[str] = None
     cfdi: Optional[CFDI] = None

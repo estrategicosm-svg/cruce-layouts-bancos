@@ -87,6 +87,7 @@ class TestI5PropuestaRevisar:
         assert row.NIVEL_CONFIANZA == "BAJA"
         assert row.ESTATUS == EstatusRegistro.PROPUESTA_REVISAR
         assert row.MOVIMIENTO_ID == ""
+        assert row.CRUCE_ID == ""
 
     def test_solo_monto_dentro_tolerancia_es_propuesta(self):
         movs = [_movimiento(cargo=1000.50, abono=0, ref="REF_A", fila=2)]
@@ -221,7 +222,8 @@ class TestI9FechasValidas:
         assert _fecha_valida(datetime(2024, 6, 15)) is True
         assert _fecha_valida(None) is False
 
-    def test_movimiento_sin_fecha_no_concilia(self):
+    def test_movimiento_sin_fecha_es_propuesta(self):
+        """Bank movement with invalid date still matches by reference, becomes PROPUESTA_REVISAR."""
         mov = MovimientoBancario(
             banco="BBVA", cuenta="0123456789",
             fecha=datetime(1, 1, 1),
@@ -236,7 +238,8 @@ class TestI9FechasValidas:
         )
         rows = result.filas
         assert len(rows) == 1
-        assert rows[0].ESTATUS == EstatusRegistro.SIN_CANDIDATO
+        assert rows[0].ESTATUS == EstatusRegistro.PROPUESTA_REVISAR
+        assert rows[0].NIVEL_CONFIANZA == "BAJA"
 
 
 # ---------------------------------------------------------------------------
@@ -267,9 +270,11 @@ class TestI10NoDobleConteo:
         total_grupo = rows[0].TOTAL_GRUPO
         assert total_grupo == Decimal("100000"), f"total_grupo={total_grupo}"
         mov_ids = [r.MOVIMIENTO_ID for r in rows if r.MOVIMIENTO_ID]
-        assert len(mov_ids) == 0, "solo monto = PROPUESTA_REVISAR = sin MOVIMIENTO_ID"
+        assert len(mov_ids) == 0, "PROPUESTA_REVISAR rows must NOT have MOVIMIENTO_ID"
         for r in rows:
             assert r.ESTATUS == EstatusRegistro.PROPUESTA_REVISAR
+            assert r.MOVIMIENTO_ID == ""
+            assert r.CRUCE_ID == ""
 
     def test_10_facturas_conciliado_totales_no_multiplicados(self):
         """1 POLIZA, 10 filas de $10,000, TOTAL_GRUPO = $100,000.
@@ -308,7 +313,7 @@ class TestI10NoDobleConteo:
         assert total_layout_conciliado == total_banco_usado
 
     def test_candidato_movimiento_id_en_propuesta(self):
-        """PROPUESTA_REVISAR tiene CANDIDATO_MOVIMIENTO_ID lleno, MOVIMIENTO_ID vacio."""
+        """PROPUESTA_REVISAR tiene CANDIDATO_* lleno pero MOVIMIENTO_ID y CRUCE_ID vacios."""
         movs = [_movimiento(cargo=5000, abono=0, ref="REF_P", fila=2)]
         cedulas = [_cedula_egreso(importe=5000, cruce="", poliza="P1")]
         result = conciliar_banco_first(
@@ -318,7 +323,9 @@ class TestI10NoDobleConteo:
         for r in result.filas:
             if r.ESTATUS == EstatusRegistro.PROPUESTA_REVISAR:
                 assert r.MOVIMIENTO_ID == ""
+                assert r.CRUCE_ID == ""
                 assert r.CANDIDATO_MOVIMIENTO_ID != ""
+                assert r.CANDIDATO_CRUCE_ID != ""
 
     def test_ambiguo_sin_candidato_id(self):
         """AMBIGUO tiene ambos campos vacios."""

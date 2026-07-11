@@ -46,7 +46,31 @@ EMPRESA_CODES = {
     "INTRA": "INTRA",
     "ICOLD": "ICOLD",
     "TRANSCRUCES": "TRANS",
+    "TRANS": "TRANS",
 }
+
+_EMPRESA_INVALIDAS = {"ESTADOS_DE_CTA_RENOMBRADO", "SAT", "ZIP", ""}
+
+
+def _extraer_empresa(archivo_banco: str, empresa_cedula: str = "") -> str:
+    """Extract empresa from cedula data or PDF filename. Never from ZIP/folder name.
+
+    Priority:
+    1. empresa from cedula (if valid catalog code)
+    2. empresa from PDF filename prefix (e.g., 'CSC_BANAMEX_...' -> 'CSC')
+    3. Fallback: EMPRESA_NO_DETERMINADA
+    """
+    if empresa_cedula and empresa_cedula.upper().strip() in EMPRESA_CODES:
+        return EMPRESA_CODES[empresa_cedula.upper().strip()]
+
+    parts = archivo_banco.replace("\\", "/").split("/")
+    for part in parts:
+        clean = part.strip().upper().split("_")[0].split(".")[0]
+        if clean in EMPRESA_CODES:
+            return EMPRESA_CODES[clean]
+
+    return "EMPRESA_NO_DETERMINADA"
+
 
 BANCO_CODES = {
     "BANAMEX": "BNMX",
@@ -59,15 +83,6 @@ BANCO_CODES = {
     "AMEX": "AMEX",
     "AMERICAN EXPRESS": "AMEX",
 }
-
-
-def _extraer_empresa(archivo_banco: str) -> str:
-    """Extract empresa code from file path like 'CSC/CSC_BAJIO_...'"""
-    parts = archivo_banco.replace("\\", "/").split("/")
-    if parts:
-        first = parts[0].upper()
-        return EMPRESA_CODES.get(first, first)
-    return "DESC"
 
 
 def _mapear_banco_code(banco: str) -> str:
@@ -353,8 +368,9 @@ def _crear_filas_para_grupo(
 ) -> list[TablaIntermediateRow]:
     filas = []
     poliza = getattr(registros[0], "poliza", "") or ""
-    empresa = "SAT"
+    empresa = getattr(registros[0], "empresa", None) or "SAT"
     moneda = getattr(registros[0], "moneda", "MXN") or "MXN"
+    num_xml_grupo = len(registros)
 
     fecha_attr = "fecha_pago" if naturaleza == Naturaleza.EGRESOS else "fecha"
     importe_attr = "importe" if naturaleza == Naturaleza.EGRESOS else "total"
@@ -375,7 +391,7 @@ def _crear_filas_para_grupo(
                 GRUPO_ID=grupo_id, POLIZA=poliza, EMPRESA=empresa,
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
-                TOTAL_GRUPO=total_grupo,
+                TOTAL_GRUPO=total_grupo, NUM_XML_GRUPO=num_xml_grupo,
                 CRUCE_ID="", CANDIDATO_CRUCE_ID="",
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
@@ -395,7 +411,7 @@ def _crear_filas_para_grupo(
                 GRUPO_ID=grupo_id, POLIZA=poliza, EMPRESA=empresa,
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
-                TOTAL_GRUPO=total_grupo,
+                TOTAL_GRUPO=total_grupo, NUM_XML_GRUPO=num_xml_grupo,
                 CRUCE_ID="", CANDIDATO_CRUCE_ID="",
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
@@ -425,7 +441,7 @@ def _crear_filas_para_grupo(
                 GRUPO_ID=grupo_id, POLIZA=poliza, EMPRESA=empresa,
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
-                TOTAL_GRUPO=total_grupo,
+                TOTAL_GRUPO=total_grupo, NUM_XML_GRUPO=num_xml_grupo,
                 CRUCE_ID="", CANDIDATO_CRUCE_ID="",
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
@@ -439,13 +455,18 @@ def _crear_filas_para_grupo(
         return filas
 
     if not _fecha_valida(getattr(mov, "fecha", None)):
+        fecha_invalida = True
+    else:
+        fecha_invalida = False
+
+    if fecha_invalida and es_referencia:
         for r in registros:
             fecha_ref = getattr(r, fecha_attr, None)
             filas.append(_crear_fila(
                 GRUPO_ID=grupo_id, POLIZA=poliza, EMPRESA=empresa,
                 BANCO=archivo_banco, MONEDA=moneda,
                 FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
-                TOTAL_GRUPO=total_grupo,
+                TOTAL_GRUPO=total_grupo, NUM_XML_GRUPO=num_xml_grupo,
                 CRUCE_ID="", CANDIDATO_CRUCE_ID=cand_cruce,
                 MOVIMIENTO_ID="", CANDIDATO_MOVIMIENTO_ID="",
                 ARCHIVO_BANCO=archivo_banco,
@@ -453,9 +474,9 @@ def _crear_filas_para_grupo(
                 FECHA_BANCO="",
                 CARGO=cargo_mov, ABONO=abono_mov,
                 DIFERENCIA=diff_grupo,
-                TIPO_MATCH=TipoMatch.NINGUNO,
-                NIVEL_CONFIANZA="NINGUNO",
-                ESTATUS=EstatusRegistro.SIN_CANDIDATO,
+                TIPO_MATCH=TipoMatch.REFERENCIA,
+                NIVEL_CONFIANZA="BAJA",
+                ESTATUS=EstatusRegistro.PROPUESTA_REVISAR,
             ))
         return filas
 
@@ -475,6 +496,9 @@ def _crear_filas_para_grupo(
     else:
         estatus = EstatusRegistro.DIFERENCIA
 
+    if fecha_invalida and estatus == EstatusRegistro.CONCILIADO:
+        estatus = EstatusRegistro.PROPUESTA_REVISAR
+
     mov_id_asignado = ""
     cand_id = candidato_hash
     cruce_asignado = ""
@@ -488,7 +512,7 @@ def _crear_filas_para_grupo(
             GRUPO_ID=grupo_id, POLIZA=poliza, EMPRESA=empresa,
             BANCO=archivo_banco, MONEDA=moneda,
             FECHA_LAYOUT=_formato_fecha(fecha_ref) if _fecha_valida(fecha_ref) else "",
-            TOTAL_GRUPO=total_grupo,
+            TOTAL_GRUPO=total_grupo, NUM_XML_GRUPO=num_xml_grupo,
             CRUCE_ID=cruce_asignado, CANDIDATO_CRUCE_ID=cand_cruce,
             MOVIMIENTO_ID=mov_id_asignado,
             CANDIDATO_MOVIMIENTO_ID=cand_id,
@@ -508,6 +532,7 @@ def _crear_filas_para_grupo(
 def _construir_universo_movimientos(
     movimientos: list,
     archivo_banco: str,
+    empresa_cedula: str = "",
 ) -> list[BankMovementRecord]:
     records = []
     for m in movimientos:
@@ -515,7 +540,7 @@ def _construir_universo_movimientos(
         concepto = getattr(m, "concepto", "") or ""
         fecha = getattr(m, "fecha", None)
         archivo_origen = getattr(m, "_archivo_origen", archivo_banco)
-        empresa = _extraer_empresa(archivo_origen)
+        empresa = _extraer_empresa(archivo_origen, empresa_cedula)
         records.append(BankMovementRecord(
             MOVIMIENTO_ID=_movimiento_id_hash(m, archivo_banco),
             ARCHIVO_BANCO=archivo_origen,
@@ -574,6 +599,7 @@ def conciliar_banco_first(
     cfdis: list,
     config: Optional[EngineConfig] = None,
     archivo_banco: str = "banco.xlsx",
+    empresa_cedula: str = "",
 ) -> EngineResult:
     if config is None:
         config = EngineConfig()
@@ -581,7 +607,7 @@ def conciliar_banco_first(
     result = EngineResult()
 
     result.movimientos_universo = _construir_universo_movimientos(
-        movimientos_bancarios, archivo_banco,
+        movimientos_bancarios, archivo_banco, empresa_cedula,
     )
 
     cruce_id_map = asignar_cruce_ids(result.movimientos_universo)
