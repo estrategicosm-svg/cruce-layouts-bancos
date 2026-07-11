@@ -183,14 +183,14 @@ if ejecutar:
 
     st.session_state["cruce_result"] = result
     st.session_state["excel_resultado"] = result["EXCEL_BYTES"]
-    st.session_state["excel_nombre"] = "CRUCE_LAYOUTS_VS_BANCOS.xlsx"
+    st.session_state["excel_nombre"] = result.get("EXCEL_NOMBRE", "CRUCE_LAYOUTS_VS_BANCOS.xlsx")
     st.session_state["excel_metadata"] = {
-        "tamaño": result["TAMAÑO"],
-        "sha256": result["SHA256"],
-        "hojas": result["HOJAS"],
+        "tamaño": result.get("EXCEL_TAMANO", 0),
+        "sha256": result.get("EXCEL_SHA256", ""),
+        "hojas": result.get("EXCEL_HOJAS", []),
         "fecha_generacion": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-        "tolerancia_mxn": result["tolerancia_mxn"],
-        "tolerancia_usd": result["tolerancia_usd"],
+        "tolerancia_mxn": result.get("tolerancia_mxn", 1.0),
+        "tolerancia_usd": result.get("tolerancia_usd", 0.01),
     }
 
 if not st.session_state.get("excel_resultado"):
