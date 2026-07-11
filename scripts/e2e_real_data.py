@@ -131,6 +131,8 @@ def _load_movimientos_zip() -> tuple[list[MovimientoBancario], pd.DataFrame]:
                         df_pdf, val = BancoPDFParser().parsear_pdf(data, fname)
                         if df_pdf is not None and not df_pdf.empty:
                             movs = banco_parser.parsear_dataframe(df_pdf)
+                            for mv in movs:
+                                mv._archivo_origen = fname
                             movimientos.extend(movs)
                             movs_count = len(movs)
                             if not df_pdf.empty:
@@ -152,6 +154,8 @@ def _load_movimientos_zip() -> tuple[list[MovimientoBancario], pd.DataFrame]:
                         parser_tipo = "BancoParser"
                         df = pd.read_excel(io.BytesIO(data))
                         movs = banco_parser.parsear_dataframe(df)
+                        for mv in movs:
+                            mv._archivo_origen = fname
                         movimientos.extend(movs)
                         movs_count = len(movs)
                         if not df.empty:
@@ -234,15 +238,27 @@ def main() -> None:
     print(f"    MOVIMIENTOS_DESCARTADOS = {movimientos_descartados}")
     print(f"    ARCHIVOS_BANCARIOS = {len(control_df)}")
 
+    # Extract period per file
+    from agent3.engine import _extraer_periodo
+    periodos_por_archivo: dict[str, tuple[int, int]] = {}
+    for _, crow in control_df.iterrows():
+        fname = crow["ARCHIVO"]
+        periodo = _extraer_periodo(fname)
+        if periodo:
+            periodos_por_archivo[fname] = periodo
+
     if not control_df.empty:
         print("\n[3b] REPORTE DE FECHAS POR ARCHIVO:")
         total_0001 = control_df["FECHAS_0001"].sum() if "FECHAS_0001" in control_df.columns else 0
-        print(f"    TOTAL FECHAS 0001-01-01 = {total_0001}")
+        print(f"    TOTAL FECHAS_0001 = {total_0001}")
         for _, crow in control_df.iterrows():
             status_mark = "OK" if crow.get("FECHAS_0001", 0) == 0 else f"FECHAS_0001={crow['FECHAS_0001']}"
+            p = periodos_por_archivo.get(crow['ARCHIVO'])
+            p_str = f"{p[0]:02d}/{p[1]}" if p else "N/A"
             print(f"    {crow['ARCHIVO']}: MOVS={crow.get('MOVIMIENTOS_EXTRAIDOS', 0)} "
                   f"FECHAS_VALIDAS={crow.get('FECHAS_VALIDAS', 0)} {status_mark} "
                   f"RANGO={crow.get('FECHA_MINIMA', '')}..{crow.get('FECHA_MAXIMA', '')} "
+                  f"PERIODO_ESPERADO={p_str} "
                   f"PARSER={crow.get('PARSER', '')} CAUSA={crow.get('CAUSA', '')}")
 
     # ── Run agent3 engine ──
@@ -256,6 +272,7 @@ def main() -> None:
         config=config,
         archivo_banco="ESTADOS_DE_CTA_RENOMBRADO",
         empresa_cedula="CSC",
+        periodos_por_archivo=periodos_por_archivo,
     )
 
     # ── Metrics ──
@@ -270,13 +287,31 @@ def main() -> None:
     print(f"    MOVIMIENTOS_BANCARIOS_BRUTOS = {result.movimientos_bancarios_totales}")
     print(f"    MOVIMIENTOS_BANCARIOS_VALIDOS = {len(movimientos_validos)}")
     print(f"    MOVIMIENTOS_DESCARTADOS = {movimientos_descartados}")
-    print(f"    ARCHIVOS_BANCARIOS = {len(control_df)}")
-    print(f"    CONCILIADOS_EXACTOS = {result.conciliados_exactos}")
-    print(f"    CONCILIADOS_TOLERANCIA = {result.conciliados_tolerancia}")
-    print(f"    PROPUESTAS_REVISAR = {result.propuesta_revisar}")
-    print(f"    AMBIGUOS = {result.ambiguos}")
-    print(f"    SIN_CANDIDATO = {result.sin_candidato}")
-    print(f"    MOVIMIENTOS_REUTILIZADOS = 0")
+    estatus = result.estatus_grupos_por_tipo()
+    print(f"    GRUPOS_CONCILIADOS = {estatus.get('CONCILIADO', 0)}")
+    print(f"    GRUPOS_PROPUESTA = {estatus.get('PROPUESTA_REVISAR', 0)}")
+    print(f"    GRUPOS_AMBIGUOS = {estatus.get('AMBIGUO', 0)}")
+    print(f"    GRUPOS_SIN_CANDIDATO = {estatus.get('SIN_CANDIDATO', 0)}")
+    print(f"    MOVIMIENTOS_TDC_EXCLUIDOS = {result.movimientos_tdc_excluidos}")
+    print(f"    MOVIMIENTOS_FUERA_PERIODO = {result.movimientos_fuera_periodo}")
+    print(f"    MOVIMIENTOS_FECHA_INVALIDA = {result.movimientos_fecha_invalida}")
+    suma_verificacion = len(cedula_egresos) + len(cedula_ingresos)
+    print(f"    SUMA_FILAS_CEDULA = {suma_verificacion}")
+    total_grupos = sum(estatus.values())
+    print(f"    TOTAL_GRUPO_IDS = {total_grupos}")
+    print(f"    SUMA_ESTATUS = {estatus.get('CONCILIADO', 0) + estatus.get('PROPUESTA_REVISAR', 0) + estatus.get('AMBIGUO', 0) + estatus.get('SIN_CANDIDATO', 0)}")
+
+    # ── Control de archivos ──
+    print("\n[5b] CONTROL DE ARCHIVOS (tabla de control por archivo):")
+    for rec in result.movimientos_universo[:1]:
+        # Just show first to confirm it has PARTICIPA_UNIVERSO
+        print(f"    Sample PARTICIPA_UNIVERSO={rec.PARTICIPA_UNIVERSO} CAUSA={rec.CAUSA_EXCLUSION}")
+
+    participa_true = sum(1 for r in result.movimientos_universo if r.PARTICIPA_UNIVERSO)
+    participa_false = sum(1 for r in result.movimientos_universo if not r.PARTICIPA_UNIVERSO)
+    print(f"    UNIVERSO_TOTAL = {len(result.movimientos_universo)}")
+    print(f"    UNIVERSO_PARTICIPA = {participa_true}")
+    print(f"    UNIVERSO_EXCLUIDOS = {participa_false}")
 
     # ── Group examples ──
     print("\n[6] EJEMPLOS DE AGRUPACION POR POLIZA (20 primeros grupos):")
@@ -301,11 +336,19 @@ def main() -> None:
     print("\n[7] GENERANDO EXCEL OPERATIVO...")
 
     # RESUMEN sheet
+    egreso_groups = {f.GRUPO_ID for f in result.filas if f.GRUPO_ID.startswith("egreso_")}
+    ingreso_groups = {f.GRUPO_ID for f in result.filas if f.GRUPO_ID.startswith("ingreso_")}
+    estatus = result.estatus_grupos_por_tipo()
+    conciliados = estatus.get("CONCILIADO", 0)
+    propuesta = estatus.get("PROPUESTA_REVISAR", 0)
+    ambiguos = estatus.get("AMBIGUO", 0)
+    sin_candidato = estatus.get("SIN_CANDIDATO", 0)
+
     resumen_data = [
         {"METRICA": "FILAS_EGRESOS", "VALOR": len(cedula_egresos)},
         {"METRICA": "FILAS_INGRESOS", "VALOR": len(cedula_ingresos)},
-        {"METRICA": "GRUPOS_EGRESOS", "VALOR": len({f.GRUPO_ID for f in result.filas if f.GRUPO_ID.startswith("egreso_")})},
-        {"METRICA": "GRUPOS_INGRESOS", "VALOR": len({f.GRUPO_ID for f in result.filas if f.GRUPO_ID.startswith("ingreso_")})},
+        {"METRICA": "GRUPOS_EGRESOS", "VALOR": len(egreso_groups)},
+        {"METRICA": "GRUPOS_INGRESOS", "VALOR": len(ingreso_groups)},
         {"METRICA": "XML_EMITIDOS", "VALOR": len(cfdis_emitidos)},
         {"METRICA": "XML_RECIBIDOS", "VALOR": len(cfdis_recibidos)},
         {"METRICA": "XML_TOTALES", "VALOR": len(cfdis)},
@@ -313,11 +356,15 @@ def main() -> None:
         {"METRICA": "MOVIMIENTOS_BANCARIOS_VALIDOS", "VALOR": len(movimientos_validos)},
         {"METRICA": "MOVIMIENTOS_DESCARTADOS", "VALOR": movimientos_descartados},
         {"METRICA": "ARCHIVOS_BANCARIOS", "VALOR": len(control_df)},
-        {"METRICA": "CONCILIADOS_EXACTOS", "VALOR": result.conciliados_exactos},
-        {"METRICA": "CONCILIADOS_TOLERANCIA", "VALOR": result.conciliados_tolerancia},
-        {"METRICA": "PROPUESTAS_REVISAR", "VALOR": result.propuesta_revisar},
-        {"METRICA": "AMBIGUOS", "VALOR": result.ambiguos},
-        {"METRICA": "SIN_CANDIDATO", "VALOR": result.sin_candidato},
+        {"METRICA": "CONCILIADOS_POR_GRUPO", "VALOR": conciliados},
+        {"METRICA": "PROPUESTA_POR_GRUPO", "VALOR": propuesta},
+        {"METRICA": "AMBIGUOS_POR_GRUPO", "VALOR": ambiguos},
+        {"METRICA": "SIN_CANDIDATO_POR_GRUPO", "VALOR": sin_candidato},
+        {"METRICA": "TOTAL_GRUPOS", "VALOR": conciliados + propuesta + ambiguos + sin_candidato},
+        {"METRICA": "MOVIMIENTOS_TDC_EXCLUIDOS", "VALOR": result.movimientos_tdc_excluidos},
+        {"METRICA": "MOVIMIENTOS_FUERA_PERIODO", "VALOR": result.movimientos_fuera_periodo},
+        {"METRICA": "MOVIMIENTOS_FECHA_INVALIDA", "VALOR": result.movimientos_fecha_invalida},
+        {"METRICA": "SUMA_FILAS_CEDULA", "VALOR": len(cedula_egresos) + len(cedula_ingresos)},
     ]
     df_resumen = pd.DataFrame(resumen_data)
 
@@ -379,7 +426,7 @@ def main() -> None:
         for f in ingreso_rows
     ])
 
-    # CEDULA_BANCOS sheet (bank movements with CRUCE_ID)
+    # CEDULA_BANCOS sheet (only participating bank movements with CRUCE_ID)
     cruce_id_map = {}
     for rec in result.movimientos_universo:
         cruce_id_map[rec.MOVIMIENTO_ID] = rec.CRUCE_ID
@@ -400,16 +447,41 @@ def main() -> None:
             "REFERENCIA": rec.REFERENCIA,
             "ARCHIVO_ORIGEN": rec.ARCHIVO_BANCO,
             "FILA_ORIGEN": rec.FILA_BANCO,
-            "ESTATUS": "VALIDO",
+            "PARTICIPA_UNIVERSO": rec.PARTICIPA_UNIVERSO,
+            "CAUSA_EXCLUSION": rec.CAUSA_EXCLUSION,
+            "ESTATUS": "VALIDO" if rec.PARTICIPA_UNIVERSO else "EXCLUIDO",
         }
         for rec in result.movimientos_universo
     ])
 
-    # REVISION_MANUAL sheet (PROPUESTA + AMBIGUO + SIN_CANDIDATO)
-    revision_rows = [
-        f for f in result.filas
-        if f.ESTATUS in (EstatusRegistro.PROPUESTA_REVISAR, EstatusRegistro.AMBIGUO, EstatusRegistro.SIN_CANDIDATO)
-    ]
+    # CONTROL_ARCHIVOS sheet
+    control_archivos_data = []
+    archivos_movs = {}
+    for rec in result.movimientos_universo:
+        archivos_movs.setdefault(rec.ARCHIVO_BANCO, []).append(rec)
+    for archivo, recs in sorted(archivos_movs.items()):
+        total = len(recs)
+        participa = sum(1 for r in recs if r.PARTICIPA_UNIVERSO)
+        excluidos = total - participa
+        periodo = periodos_por_archivo.get(archivo)
+        periodo_str = f"{periodo[0]:02d}/{periodo[1]}" if periodo else "N/A"
+        control_archivos_data.append({
+            "ARCHIVO": archivo,
+            "MOVIMIENTOS_TOTALES": total,
+            "PARTICIPA": participa,
+            "EXCLUIDOS": excluidos,
+            "PERIODO_ESPERADO": periodo_str,
+        })
+    df_control_archivos = pd.DataFrame(control_archivos_data)
+
+    # REVISION_MANUAL sheet — 1 row per GRUPO_ID+CANDIDATO, deduplicated
+    revision_grupos: dict[str, object] = {}
+    for f in result.filas:
+        if f.ESTATUS in (EstatusRegistro.PROPUESTA_REVISAR, EstatusRegistro.AMBIGUO, EstatusRegistro.SIN_CANDIDATO):
+            key = f"{f.GRUPO_ID}|{f.CANDIDATO_CRUCE_ID or ''}|{f.CANDIDATO_MOVIMIENTO_ID or ''}"
+            if key not in revision_grupos:
+                revision_grupos[key] = f
+    revision_rows = list(revision_grupos.values())
     df_revision = pd.DataFrame([
         {
             "GRUPO_ID": f.GRUPO_ID,
@@ -437,6 +509,7 @@ def main() -> None:
         df_ingresos.to_excel(writer, sheet_name="RESULTADO_INGRESOS", index=False)
         df_bancos.to_excel(writer, sheet_name="CEDULA_BANCOS", index=False)
         df_revision.to_excel(writer, sheet_name="REVISION_MANUAL", index=False)
+        df_control_archivos.to_excel(writer, sheet_name="CONTROL_ARCHIVOS", index=False)
 
     excel_bytes = excel_path.read_bytes()
     excel_hash = sha256_bytes(excel_bytes)

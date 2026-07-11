@@ -51,6 +51,46 @@ EMPRESA_CODES = {
 
 _EMPRESA_INVALIDAS = {"ESTADOS_DE_CTA_RENOMBRADO", "SAT", "ZIP", ""}
 
+_MONTH_MAP = {
+    "ENE": 1, "FEB": 2, "MAR": 3, "ABR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AGO": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DIC": 12,
+}
+
+
+def _es_tdc(nombre_archivo: str) -> bool:
+    """Detect if a bank file is a credit card (TDC) statement."""
+    upper = nombre_archivo.upper()
+    return "-TDC" in upper or "_TDC" in upper or "TARJETA" in upper
+
+
+def _extraer_periodo(nombre_archivo: str) -> tuple[int, int] | None:
+    """Extract (month, year) from filename like 'CSC_BANAMEX_CTA0859_USD_FEB2024.pdf'.
+
+    Returns None if period cannot be determined.
+    """
+    upper = nombre_archivo.upper()
+    import re
+    match = re.search(r"(ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)(\d{4})", upper)
+    if match:
+        mes_str = match.group(1)
+        anio = int(match.group(2))
+        mes = _MONTH_MAP.get(mes_str)
+        if mes:
+            return (mes, anio)
+    return None
+
+
+def _en_periodo(fecha, periodo: tuple[int, int] | None) -> bool:
+    """Check if a datetime falls within the expected (month, year) period."""
+    if periodo is None:
+        return True
+    if fecha is None:
+        return False
+    try:
+        return fecha.month == periodo[0] and fecha.year == periodo[1]
+    except AttributeError:
+        return False
+
 
 def _extraer_empresa(archivo_banco: str, empresa_cedula: str = "") -> str:
     """Extract empresa from cedula data or PDF filename. Never from ZIP/folder name.
@@ -128,12 +168,15 @@ class BankMovementRecord:
     FECHA_VALIDA: bool
     NATURALEZA: str
     CRUCE_ID: str = ""
+    PARTICIPA_UNIVERSO: bool = True
+    CAUSA_EXCLUSION: str = ""
 
 
 @dataclass
 class EngineResult:
     filas: list[TablaIntermediateRow] = field(default_factory=list)
     movimientos_universo: list[BankMovementRecord] = field(default_factory=list)
+    control_archivos: list[dict] = field(default_factory=list)
 
     @property
     def total_grupos(self) -> int:
@@ -157,6 +200,30 @@ class EngineResult:
     @property
     def grupos_sin_candidato(self) -> int:
         return len(self._grupos_con_estatus(EstatusRegistro.SIN_CANDIDATO))
+
+    @property
+    def grupos_diferencia(self) -> int:
+        return len(self._grupos_con_estatus(EstatusRegistro.DIFERENCIA))
+
+    def estatus_grupos_por_tipo(self, naturaleza: str | None = None) -> dict[str, int]:
+        """Count unique GRUPO_ID per estatus, filtered by naturaleza prefix.
+        If naturaleza is None, counts across all naturalezas."""
+        grupos_por_estatus: dict[str, set] = defaultdict(set)
+        for f in self.filas:
+            if naturaleza:
+                prefix = "egreso_" if naturaleza == "EGRESOS" else "ingreso_"
+                if not f.GRUPO_ID.startswith(prefix):
+                    continue
+            grupos_por_estatus[f.ESTATUS.value].add(f.GRUPO_ID)
+        return {k: len(v) for k, v in grupos_por_estatus.items()}
+
+    @property
+    def filas_layout_propagadas(self) -> int:
+        return len(self.filas)
+
+    @property
+    def grupos_unicos_con_resultado(self) -> int:
+        return len({f.GRUPO_ID for f in self.filas})
 
     @property
     def conciliados(self) -> int:
@@ -197,6 +264,22 @@ class EngineResult:
     @property
     def movimientos_bancarios_totales(self) -> int:
         return len(self.movimientos_universo)
+
+    @property
+    def movimientos_en_universo(self) -> int:
+        return sum(1 for m in self.movimientos_universo if m.PARTICIPA_UNIVERSO)
+
+    @property
+    def movimientos_tdc_excluidos(self) -> int:
+        return sum(1 for m in self.movimientos_universo if "TDC" in m.CAUSA_EXCLUSION)
+
+    @property
+    def movimientos_fecha_invalida(self) -> int:
+        return sum(1 for m in self.movimientos_universo if "FECHA" in m.CAUSA_EXCLUSION)
+
+    @property
+    def movimientos_fuera_periodo(self) -> int:
+        return sum(1 for m in self.movimientos_universo if "PERIODO" in m.CAUSA_EXCLUSION)
 
 
 def _es_cargo(mov) -> bool:
@@ -533,6 +616,7 @@ def _construir_universo_movimientos(
     movimientos: list,
     archivo_banco: str,
     empresa_cedula: str = "",
+    periodos_por_archivo: dict[str, tuple[int, int]] | None = None,
 ) -> list[BankMovementRecord]:
     records = []
     for m in movimientos:
@@ -541,6 +625,35 @@ def _construir_universo_movimientos(
         fecha = getattr(m, "fecha", None)
         archivo_origen = getattr(m, "_archivo_origen", archivo_banco)
         empresa = _extraer_empresa(archivo_origen, empresa_cedula)
+        fecha_val = _fecha_valida(fecha)
+
+        # Determine period for this file
+        periodo = None
+        if periodos_por_archivo:
+            periodo = periodos_por_archivo.get(archivo_origen)
+            if periodo is None:
+                # Try to extract from filename
+                periodo = _extraer_periodo(archivo_origen)
+
+        # Determine PARTICIPA_UNIVERSO
+        participa = True
+        causa = ""
+
+        # TDC exclusion
+        if _es_tdc(archivo_origen):
+            participa = False
+            causa = "TDC_EXCLUIDA"
+
+        # Fecha 0001 exclusion
+        if participa and not fecha_val:
+            participa = False
+            causa = "FECHA_INVALIDA_0001"
+
+        # Period validation
+        if participa and fecha_val and not _en_periodo(fecha, periodo):
+            participa = False
+            causa = f"FUERA_PERIODO_{fecha.month:02d}/{fecha.year}"
+
         records.append(BankMovementRecord(
             MOVIMIENTO_ID=_movimiento_id_hash(m, archivo_banco),
             ARCHIVO_BANCO=archivo_origen,
@@ -555,8 +668,10 @@ def _construir_universo_movimientos(
             ABONO=Decimal(str(m.abono)),
             REFERENCIA=ref,
             REFERENCIA_CLASIFICACION=_clasificar_referencia(ref, concepto),
-            FECHA_VALIDA=_fecha_valida(fecha),
+            FECHA_VALIDA=fecha_val,
             NATURALEZA="CARGO" if _es_cargo(m) else ("ABONO" if _es_abono(m) else "MIXTO"),
+            PARTICIPA_UNIVERSO=participa,
+            CAUSA_EXCLUSION=causa,
         ))
     return records
 
@@ -600,6 +715,7 @@ def conciliar_banco_first(
     config: Optional[EngineConfig] = None,
     archivo_banco: str = "banco.xlsx",
     empresa_cedula: str = "",
+    periodos_por_archivo: dict[str, tuple[int, int]] | None = None,
 ) -> EngineResult:
     if config is None:
         config = EngineConfig()
@@ -607,7 +723,7 @@ def conciliar_banco_first(
     result = EngineResult()
 
     result.movimientos_universo = _construir_universo_movimientos(
-        movimientos_bancarios, archivo_banco, empresa_cedula,
+        movimientos_bancarios, archivo_banco, empresa_cedula, periodos_por_archivo,
     )
 
     cruce_id_map = asignar_cruce_ids(result.movimientos_universo)
@@ -622,8 +738,16 @@ def conciliar_banco_first(
         if ref:
             index_ref_banco.setdefault(ref.strip().upper(), []).append(m)
 
-    movimientos_egresos = [m for m in movimientos_bancarios if _es_cargo(m)]
-    movimientos_ingresos = [m for m in movimientos_bancarios if _es_abono(m)]
+    # Filter to only movements that participate in universe
+    movimientos_validos = [
+        m for m in movimientos_bancarios
+        if any(r.MOVIMIENTO_ID == _movimiento_id_hash(m, archivo_banco)
+               and r.PARTICIPA_UNIVERSO
+               for r in result.movimientos_universo)
+    ]
+
+    movimientos_egresos = [m for m in movimientos_validos if _es_cargo(m)]
+    movimientos_ingresos = [m for m in movimientos_validos if _es_abono(m)]
 
     mov_asig_eg: set = set()
     mov_asig_ing: set = set()
