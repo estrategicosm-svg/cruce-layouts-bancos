@@ -1,4 +1,4 @@
-"""Dashboard Streamlit para cruce de layouts vs estados de cuenta bancarios."""
+"""Dashboard Streamlit - Cruce de layouts vs estados de cuenta bancarios."""
 from __future__ import annotations
 
 import sys
