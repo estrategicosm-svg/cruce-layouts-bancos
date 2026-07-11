@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
 from copy import copy
+from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -117,12 +117,9 @@ def generar_excel(
     filas_ingresos: list,
     movimientos: list[MovimientoBanco],
     cruce_map: dict[str, str],
-    archivo_salida: str,
+    archivo_salida: str | None = None,
 ) -> dict:
-    Path(archivo_salida).parent.mkdir(parents=True, exist_ok=True)
-
-    shutil.copy2(ASSETS / "LAYOUT_CARGA_EGRESOS_OUTPUT.xlsx", archivo_salida)
-    wb = load_workbook(archivo_salida)
+    wb = load_workbook(ASSETS / "LAYOUT_CARGA_EGRESOS_OUTPUT.xlsx")
     ws_eg = wb["DATOS"]
 
     idx_eg = {}
@@ -192,9 +189,16 @@ def generar_excel(
     if "Sheet" in wb.sheetnames:
         del wb["Sheet"]
 
-    wb.save(archivo_salida)
-    raw = Path(archivo_salida).read_bytes()
+    buf = BytesIO()
+    wb.save(buf)
+    raw = buf.getvalue()
+
+    if archivo_salida:
+        Path(archivo_salida).parent.mkdir(parents=True, exist_ok=True)
+        Path(archivo_salida).write_bytes(raw)
+
     return {
+        "bytes": raw,
         "archivo": archivo_salida,
         "tamaño": len(raw),
         "sha256": _sha256(raw),

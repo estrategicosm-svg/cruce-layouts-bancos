@@ -4,8 +4,8 @@ from __future__ import annotations
 import importlib.util
 import io
 import sys
-import tempfile
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -123,43 +123,69 @@ def _combinar_bancos_a_zip(
     return buf.getvalue(), nombre, n_zip, n_pdfs
 
 
+def _leer_hoja_excel(excel_bytes: bytes, sheet_name: str, min_row: int = 2):
+    wb = load_workbook(io.BytesIO(excel_bytes), read_only=True)
+    ws = wb[sheet_name]
+    rows = list(ws.iter_rows(min_row=min_row, values_only=True))
+    wb.close()
+    if not rows:
+        return [], []
+    headers = [str(h or f"col_{i}") for i, h in enumerate(rows[0])]
+    return headers, rows[1:]
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 st.markdown("## Conciliador Layouts vs Bancos")
 
-if not ejecutar:
-    st.info(
-        "Sube los archivos en la barra lateral y presiona **Ejecutar cruce**."
-    )
-    st.stop()
-
-zip_bytes, nombre_zip, n_zip, n_pdfs = _combinar_bancos_a_zip(
-    f_bancos_zip, f_bancos_pdfs
-)
-
-with st.spinner("Procesando..."):
-    result = ejecutar_cruce(
-        egresos_bytes=f_egresos.getvalue(),
-        nombre_egresos=f_egresos.name,
-        ingresos_bytes=f_ingresos.getvalue(),
-        nombre_ingresos=f_ingresos.name,
-        zip_bancos_bytes=zip_bytes,
-        nombre_zip=nombre_zip,
-        tolerancia_mxn=tol_mxn,
-        tolerancia_usd=tol_usd,
+if ejecutar:
+    zip_bytes, nombre_zip, n_zip, n_pdfs = _combinar_bancos_a_zip(
+        f_bancos_zip, f_bancos_pdfs
     )
 
-# ── Alertas de lectura ───────────────────────────────────────────────────────
-if result.get("ERRORES_ARCHIVOS"):
-    st.error(
-        f"**{len(result['ERRORES_ARCHIVOS'])} archivo(s) fallaron al procesarse:**"
-    )
-    for err in result["ERRORES_ARCHIVOS"]:
-        st.markdown(
-            f"- **{err.archivo}** ({err.tipo}): {err.error}"
+    with st.spinner("Procesando..."):
+        result = ejecutar_cruce(
+            egresos_bytes=f_egresos.getvalue(),
+            nombre_egresos=f_egresos.name,
+            ingresos_bytes=f_ingresos.getvalue(),
+            nombre_ingresos=f_ingresos.name,
+            zip_bancos_bytes=zip_bytes,
+            nombre_zip=nombre_zip,
+            tolerancia_mxn=tol_mxn,
+            tolerancia_usd=tol_usd,
         )
 
-for adv in result.get("ADVERTENCIAS_LECTURA", []):
-    st.warning(adv)
+    st.session_state["cruce_result"] = result
+    st.session_state["excel_resultado"] = result["EXCEL_BYTES"]
+    st.session_state["excel_nombre"] = "CRUCE_LAYOUTS_VS_BANCOS.xlsx"
+    st.session_state["excel_metadata"] = {
+        "tamaño": result["TAMAÑO"],
+        "sha256": result["SHA256"],
+        "hojas": result["HOJAS"],
+        "fecha_generacion": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "tolerancia_mxn": result["tolerancia_mxn"],
+        "tolerancia_usd": result["tolerancia_usd"],
+    }
+
+if not st.session_state.get("excel_resultado"):
+    st.info("Sube los archivos en la barra lateral y presiona **Ejecutar cruce**.")
+    st.stop()
+
+result = st.session_state["cruce_result"]
+excel_bytes = st.session_state["excel_resultado"]
+
+# ── Alertas de lectura ───────────────────────────────────────────────────────
+if ejecutar:
+    if result.get("ERRORES_ARCHIVOS"):
+        st.error(
+            f"**{len(result['ERRORES_ARCHIVOS'])} archivo(s) fallaron al procesarse:**"
+        )
+        for err in result["ERRORES_ARCHIVOS"]:
+            st.markdown(
+                f"- **{err.archivo}** ({err.tipo}): {err.error}"
+            )
+
+    for adv in result.get("ADVERTENCIAS_LECTURA", []):
+        st.warning(adv)
 
 # ── KPIs ─────────────────────────────────────────────────────────────────────
 c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -226,21 +252,16 @@ with tab_res:
 with tab_eg:
     st.markdown("### Layout de egresos con CRUCE BANCARIO")
     try:
-        wb = load_workbook(result["ARCHIVO"], read_only=True)
-        ws = wb["DATOS"]
-        rows = list(ws.iter_rows(min_row=2, values_only=True))
-        headers = [str(h or f"col_{i}") for i, h in enumerate(rows[0])]
-        data = rows[1:]
-        df_eg = pd.DataFrame(data, columns=headers)
-        wb.close()
+        headers, data = _leer_hoja_excel(excel_bytes, "DATOS")
+        df_eg = pd.DataFrame(data, columns=headers) if headers else pd.DataFrame()
 
-        if "CRUCE BANCARIO" in df_eg.columns:
+        if not df_eg.empty and "CRUCE BANCARIO" in df_eg.columns:
             matched = df_eg["CRUCE BANCARIO"].notna().sum()
             st.caption(f"{matched} de {len(df_eg)} filas con cruce asignado")
             highlight = df_eg[df_eg["CRUCE BANCARIO"].notna()]
             if not highlight.empty:
                 st.dataframe(highlight, use_container_width=True, height=400)
-        else:
+        elif not df_eg.empty:
             st.dataframe(df_eg, use_container_width=True, height=400)
     except Exception as e:
         st.error(f"Error leyendo egresos: {e}")
@@ -249,21 +270,16 @@ with tab_eg:
 with tab_ing:
     st.markdown("### Layout de ingresos con CRUCE BANCARIO")
     try:
-        wb = load_workbook(result["ARCHIVO"], read_only=True)
-        ws = wb["INGRESOS"]
-        rows = list(ws.iter_rows(min_row=2, values_only=True))
-        headers = [str(h or f"col_{i}") for i, h in enumerate(rows[0])]
-        data = rows[1:]
-        df_ing = pd.DataFrame(data, columns=headers)
-        wb.close()
+        headers, data = _leer_hoja_excel(excel_bytes, "INGRESOS")
+        df_ing = pd.DataFrame(data, columns=headers) if headers else pd.DataFrame()
 
-        if "CRUCE BANCARIO" in df_ing.columns:
+        if not df_ing.empty and "CRUCE BANCARIO" in df_ing.columns:
             matched = df_ing["CRUCE BANCARIO"].notna().sum()
             st.caption(f"{matched} de {len(df_ing)} filas con cruce asignado")
             highlight = df_ing[df_ing["CRUCE BANCARIO"].notna()]
             if not highlight.empty:
                 st.dataframe(highlight, use_container_width=True, height=400)
-        else:
+        elif not df_ing.empty:
             st.dataframe(df_ing, use_container_width=True, height=400)
     except Exception as e:
         st.error(f"Error leyendo ingresos: {e}")
@@ -272,7 +288,7 @@ with tab_ing:
 with tab_mov:
     st.markdown("### Movimientos bancarios")
     try:
-        wb = load_workbook(result["ARCHIVO"], read_only=True)
+        wb = load_workbook(io.BytesIO(excel_bytes), read_only=True)
         ws = wb["MOVIMIENTOS_BANCARIOS"]
 
         summary_start = None
@@ -335,22 +351,30 @@ with tab_mov:
 # ── Archivo ──────────────────────────────────────────────────────────────────
 with tab_arch:
     st.markdown("### Descargar resultado")
-    archivo = Path(result["ARCHIVO"])
-    if archivo.exists():
+
+    excel_data = st.session_state.get("excel_resultado")
+    meta = st.session_state.get("excel_metadata", {})
+    excel_name = st.session_state.get("excel_nombre", "CRUCE_LAYOUTS_VS_BANCOS.xlsx")
+
+    if excel_data:
         st.download_button(
-            label="Descargar Excel de cruce",
-            data=archivo.read_bytes(),
-            file_name=archivo.name,
+            label="Descargar Excel final",
+            data=excel_data,
+            file_name=excel_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary",
             use_container_width=True,
         )
         st.markdown(f"""
         | Propiedad | Valor |
         |-----------|-------|
-        | Archivo | `{result['ARCHIVO']}` |
-        | Tamano | {result['TAMAÑO']:,} bytes |
-        | Hojas | {', '.join(result['HOJAS'])} |
-        | SHA256 | `{result['SHA256'][:32]}...` |
-        | Tolerancia MXN | ${result['tolerancia_mxn']:.2f} |
-        | Tolerancia USD | ${result['tolerancia_usd']:.2f} |
+        | Archivo | `{excel_name}` |
+        | Tamano | {meta.get("tamaño", 0):,} bytes |
+        | Fecha generacion | {meta.get("fecha_generacion", "N/A")} |
+        | Hojas | {', '.join(meta.get("hojas", []))} |
+        | SHA256 | `{meta.get("sha256", "N/A")[:32]}...` |
+        | Tolerancia MXN | ${meta.get("tolerancia_mxn", 0):.2f} |
+        | Tolerancia USD | ${meta.get("tolerancia_usd", 0):.2f} |
         """)
+    else:
+        st.info("Ejecuta primero el cruce para generar el archivo.")

@@ -23,7 +23,7 @@ def ejecutar_cruce(
     nombre_ingresos: str,
     zip_bancos_bytes: bytes,
     nombre_zip: str,
-    archivo_salida: str = "outputs/CRUCE_LAYOUTS_VS_BANCOS_FEB24.xlsx",
+    archivo_salida: str | None = None,
     tolerancia_mxn: float = 1.0,
     tolerancia_usd: float = 0.01,
 ) -> dict:
@@ -88,6 +88,7 @@ def ejecutar_cruce(
         "MOVIMIENTOS_REUTILIZADOS": 0,
         "MOVIMIENTOS_UNICOS_USADOS": len(movs_used),
         "ARCHIVO": info["archivo"],
+        "EXCEL_BYTES": info["bytes"],
         "TAMAÑO": info["tamaño"],
         "SHA256": info["sha256"],
         "HOJAS": info["hojas"],
