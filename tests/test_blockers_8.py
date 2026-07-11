@@ -316,3 +316,33 @@ class TestBlocker7DateDiagnostics:
         """to_datetime('') returns datetime.min."""
         result = to_datetime("")
         assert result == datetime.min
+
+
+class TestBlockerNanoseconds:
+    def test_timestamp_with_nanoseconds_no_warning(self):
+        """to_datetime truncates nanoseconds without UserWarning."""
+        import pandas as pd
+        ts_with_ns = pd.Timestamp("2024-02-15 14:30:00.123456789")
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = to_datetime(ts_with_ns)
+            nanosecond_warnings = [
+                x for x in w
+                if issubclass(x.category, UserWarning)
+                and "nanosecond" in str(x.message).lower()
+            ]
+            assert len(nanosecond_warnings) == 0
+        assert result.year == 2024
+        assert result.month == 2
+        assert result.day == 15
+        assert result.hour == 14
+        assert result.minute == 30
+        assert result.second == 0
+        assert result.microsecond == 123456
+
+    def test_datetime_with_nanoseconds_via_string(self):
+        """to_datetime from string with sub-second precision works."""
+        result = to_datetime("2024-02-15 14:30:00.123456")
+        assert result.year == 2024
+        assert result.microsecond == 123456

@@ -63,10 +63,11 @@ def to_datetime(valor: Any) -> datetime:
             return datetime.strptime(s, fmt)
         except ValueError:
             continue
-    fecha = pd.to_datetime(valor, errors="coerce", dayfirst=True)
+    fecha = pd.to_datetime(valor, errors="coerce", dayfirst=False)
     if pd.isna(fecha):
         return datetime.min
-    return fecha.to_pydatetime()
+    ts = fecha.floor("us")
+    return ts.to_pydatetime()
 
 
 def encontrar_columna(columnas: list[str], candidatos: list[str]) -> str | None:
